@@ -1,0 +1,23 @@
+source: 0                     # 0 = webcam, or path to video file
+model_weights: yolov8n.pt
+conf_threshold: 0.35
+classes: null                 # null = all classes, or list of class ids e.g. [0, 2, 8]
+
+tracker:
+  track_thresh: 0.5
+  match_thresh: 0.8
+  track_buffer: 30
+
+zones:
+  - name: hassas_bolge_1
+    polygon: [[400, 200], [900, 200], [900, 600], [400, 600]]
+
+priority_weights:
+  speed: 0.4
+  zone: 0.4
+  dwell_time: 0.2
+
+output:
+  save_video: false
+  output_path: data/output.mp4
+  log_path: data/logs/session.jsonl
