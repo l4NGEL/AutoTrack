@@ -10,6 +10,8 @@ import yaml
 
 from detection.yolo_detector import YoloDetector
 from tracking.bytetrack_wrapper import ByteTracker
+from tracking.adaptive_tracker import AdaptiveTracker
+from reid.feature_extractor import OSNetFeatureExtractor
 from decision.priority_engine import PriorityEngine
 from decision.zone_rules import load_zones
 from viz.overlay_renderer import draw_zones, draw_tracks, draw_hud
@@ -21,18 +23,69 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def _build_tracker(tracker_cfg: dict):
+    kind = tracker_cfg.get("type", "iou")
+    if kind == "adaptive":
+        a = tracker_cfg.get("adaptive", {})
+        tracker = AdaptiveTracker(
+            track_thresh=tracker_cfg["track_thresh"],
+            track_buffer=tracker_cfg["track_buffer"],
+            match_thresh=a.get("match_thresh", 0.3),
+            weight_mode=a.get("weight_mode", "adaptive"),
+            base_weights=tuple(a.get("base_weights", [0.4, 0.3, 0.3])),
+            embedding_momentum=a.get("embedding_momentum", 0.9),
+        )
+    else:
+        tracker = ByteTracker(
+            track_thresh=tracker_cfg["track_thresh"],
+            match_thresh=tracker_cfg["match_thresh"],
+            track_buffer=tracker_cfg["track_buffer"],
+        )
+    return tracker, kind
+
+
+def _open_capture(source):
+    # MSMF bazi Windows webcam'lerinde frame yakalayamiyor; DirectShow'a dus.
+    cap = cv2.VideoCapture(source, cv2.CAP_DSHOW) if isinstance(source, int) else cv2.VideoCapture(source)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(source)
+    if isinstance(source, int):
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUY2"))
+    return cap
+
+
 def run(cfg: dict):
     source = cfg["source"]
-    cap = cv2.VideoCapture(source)
+    cap = _open_capture(source)
     if not cap.isOpened():
         raise RuntimeError(f"Video kaynagi acilamadi: {source}")
+
+    ok, _ = cap.read()
+    if not ok:
+        cap.release()
+        raise RuntimeError(
+            f"Video kaynagi acildi ama kare okunamadi: {source}. "
+            "Kamera baska bir uygulama tarafindan kullaniliyor olabilir "
+            "veya Windows kamera izinleri kapali olabilir."
+        )
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0) if not isinstance(source, int) else None
 
     detector = YoloDetector(
         weights=cfg["model_weights"],
         conf_threshold=cfg["conf_threshold"],
         classes=cfg.get("classes"),
     )
-    tracker = ByteTracker(**cfg["tracker"])
+    tracker, tracker_kind = _build_tracker(cfg["tracker"])
+
+    reid_extractor = None
+    reid_cfg = cfg.get("reid", {})
+    if tracker_kind == "adaptive" and reid_cfg.get("enabled", False):
+        reid_extractor = OSNetFeatureExtractor(
+            model_name=reid_cfg.get("model_name", "osnet_x1_0"),
+            checkpoint_path=reid_cfg.get("checkpoint_path"),
+            input_size=tuple(reid_cfg.get("input_size", (256, 128))),
+        )
+
     zones = load_zones(cfg["zones"])
     engine = PriorityEngine(zones=zones, weights=cfg["priority_weights"])
     logger = PerformanceLogger(cfg["output"]["log_path"])
@@ -50,14 +103,17 @@ def run(cfg: dict):
                 break
 
             detections = detector.detect(frame)
-            tracks = tracker.update(detections)
+            if tracker_kind == "adaptive":
+                tracks = tracker.update(detections, frame, extractor=reid_extractor)
+            else:
+                tracks = tracker.update(detections)
 
             priority_results = {}
             for track in tracks:
                 priority_results[track.track_id] = engine.evaluate(track)
 
             fps = logger.tick()
-            logger.log_frame(fps, len(detections), list(priority_results.values()))
+            logger.log_frame(fps, len(detections), list(priority_results.values()), tracks)
 
             frame = draw_zones(frame, zones)
             frame = draw_tracks(frame, tracks, priority_results)

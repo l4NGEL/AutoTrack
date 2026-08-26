@@ -24,7 +24,19 @@ class PerformanceLogger:
         elapsed = time.time() - self._start_time
         return self._frame_count / elapsed if elapsed > 0 else 0.0
 
-    def log_frame(self, fps: float, num_detections: int, priority_results: list):
+    def log_frame(self, fps: float, num_detections: int, priority_results: list, tracks: list = None):
+        track_confidence = []
+        for t in tracks or []:
+            bucket = getattr(t, "confidence_bucket", None)
+            if bucket is not None:
+                track_confidence.append(
+                    {
+                        "track_id": t.track_id,
+                        "confidence": round(t.track_confidence, 3),
+                        "bucket": bucket.value,
+                    }
+                )
+
         entry = {
             "ts": time.time(),
             "fps": round(fps, 2),
@@ -33,6 +45,7 @@ class PerformanceLogger:
                 {"track_id": r.track_id, "score": r.score, "reasons": r.reasons}
                 for r in priority_results
             ],
+            "track_confidence": track_confidence,
         }
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

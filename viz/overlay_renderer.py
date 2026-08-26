@@ -37,6 +37,9 @@ def draw_tracks(frame, tracks, priority_results: dict):
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
         label = f"ID {track.track_id} {track.cls_name} P={score:.2f}"
+        bucket = getattr(track, "confidence_bucket", None)
+        if bucket is not None:
+            label += f" [{bucket.value}]"
         cv2.putText(frame, label, (x1, max(y1 - 8, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         if result and result.reasons:

@@ -4,9 +4,21 @@ conf_threshold: 0.35
 classes: null                 # null = all classes, or list of class ids e.g. [0, 2, 8]
 
 tracker:
+  type: adaptive               # "iou" (baseline ByteTracker) veya "adaptive" (Re-ID + Kalman + adaptif agirlik)
   track_thresh: 0.5
-  match_thresh: 0.8
   track_buffer: 30
+  match_thresh: 0.8            # sadece type: iou icin kullanilir
+  adaptive:                    # sadece type: adaptive icin kullanilir
+    match_thresh: 0.3          # min birlesik skor (IOU+hareket+ReID), altinda eslesme reddedilir
+    weight_mode: adaptive      # "adaptive" (dinamik) veya "fixed" (ablation icin sabit)
+    base_weights: [0.4, 0.3, 0.3]  # alpha (IOU), beta (hareket), gamma (Re-ID)
+    embedding_momentum: 0.9    # track embedding'i EMA ile guncellenir
+
+reid:
+  enabled: true
+  model_name: osnet_x1_0
+  checkpoint_path: null        # null ise ImageNet backbone (zayif embedding); egitilmis checkpoint icin dosya yolu verin
+  input_size: [256, 128]
 
 zones:
   - name: hassas_bolge_1
