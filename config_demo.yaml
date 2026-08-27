@@ -20,6 +20,9 @@ tracker:
     weight_mode: adaptive
     base_weights: [0.4, 0.3, 0.3]
     embedding_momentum: 0.9
+    reid_recovery_enabled: true
+    reid_recovery_window: 60
+    reid_recovery_thresh: 0.75
 
 reid:
   enabled: true

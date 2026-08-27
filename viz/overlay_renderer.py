@@ -28,7 +28,21 @@ def draw_zones(frame, zones: list[Zone]):
 
 
 def draw_tracks(frame, tracks, priority_results: dict):
+    """Sadece BU KAREDE gercekten eslesen track'leri cizer.
+
+    track.xyxy her karede Kalman tahminiyle guncellenir (bkz.
+    AdaptiveTracker.update), bu tespit edilmemis (missed>0) track'ler icin
+    de gecerli -- yani ekrana bakan biri "burada kimse yokken neden kutu
+    var?" diye sorabilir (2026-08-27'de gercek bir demo videosunda tam
+    olarak bu gozlendi: Kalman'in ekstrapole ettigi bos-alan tahmini,
+    gercek tespitmis gibi ciziliyordu). Track'in kendisi missed>track_buffer
+    olana kadar hafizada kalmaya devam eder (Re-ID/kurtarma icin), ama
+    ekranda SADECE bu karede gercekten goruldugu icin ciziyoruz.
+    """
     for track in tracks:
+        if getattr(track, "missed", 0) > 0:
+            continue
+
         result = priority_results.get(track.track_id)
         score = result.score if result else 0.0
         color = _color_for_score(score)

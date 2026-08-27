@@ -23,6 +23,19 @@ hesaplar (bkz. compute_adaptive_weights):
   - crop_quality: tespit guveni ve kutu alaninin referans (ilk gorulen)
     alana orani. Dusukse (kucuk/belirsiz kirpim) Re-ID (gamma) agirligi
     azalir -- kucuk/bulanik kirpimdan cikan embedding guvenilmezdir.
+
+Kayip kimlik kurtarma (lost-track gallery):
+Bir track `track_buffer` kare boyunca eslesmezse silinir -- ama silinmeden
+once (person sinifiysa ve embedding'i varsa) `lost_gallery`'ye tasinir ve
+orada `reid_recovery_window` kare daha "aday kimlik" olarak bekler. Bu sure
+icinde eslesmemis (yeni track adayi olan) bir tespit gelirse, once bu
+galeriye karsi Re-ID benzerligi kontrol edilir (`reid_recovery_thresh` --
+match_thresh'ten daha siki, cunku mekansal/hareket dogrulamasi yok, sadece
+gorunume guveniliyor + kaba bir mesafe siniri). Yeterince benzerse YENI bir
+ID verilmez, eski track_id geri canlandirilir. Bu, DeepSORT'un "silinen
+track'leri bir sure daha eslestirme adayi tutma" fikrinin basitlestirilmis
+hali -- 2026-08-27'de gercek bir demo videosunda gozlenen "kisi kayboluyor,
+birkac kare sonra yeni ID ile geri geliyor" sorununa dogrudan cevap.
 """
 from __future__ import annotations
 
@@ -43,6 +56,11 @@ OCCLUSION_IOU_THRESH = 0.15
 FAST_MOTION_NORM_THRESH = 0.02  # frame kosegenine oranla hiz
 MIN_CROP_QUALITY_CONF = 0.55
 MIN_CROP_AREA_RATIO = 0.15  # referans (ilk gorulen) alana oran
+
+# Kayip kimlik kurtarma (lost-track gallery) icin varsayilanlar
+DEFAULT_REID_RECOVERY_WINDOW = 60  # kare -- track_buffer'dan sonra kimlik ne kadar sure "aday" kalir
+DEFAULT_REID_RECOVERY_THRESH = 0.75  # ham cosine benzerligi (mapped [0,1] degil) -- match_thresh'ten siki
+MAX_RECOVERY_DIST_RATIO = 0.5  # kare kosegenine oran -- bunun otesindeki "benzer" eslesmeler reddedilir
 
 
 class Confidence(Enum):
@@ -88,6 +106,19 @@ class AdaptiveTrack:
         if c >= 0.5:
             return Confidence.UNCERTAIN
         return Confidence.LOST_CANDIDATE
+
+
+@dataclass
+class LostTrack:
+    """track_buffer asilip silinen bir track'in Re-ID kurtarma icin bir
+    sure daha sakladigimiz ozeti. Kalman/history gibi hareket durumunu
+    TASIMAZ -- o zaten gecersiz hale gelmistir (bkz. AdaptiveTracker._revive_track)."""
+
+    track_id: int
+    embedding: np.ndarray
+    last_xyxy: tuple
+    cls_name: str
+    age: int = 0  # kayip galeride kac karedir bekliyor
 
 
 def compute_adaptive_weights(
@@ -145,6 +176,9 @@ class AdaptiveTracker:
         weight_mode: str = "adaptive",
         base_weights: tuple = DEFAULT_BASE_WEIGHTS,
         embedding_momentum: float = 0.9,
+        reid_recovery_enabled: bool = True,
+        reid_recovery_window: int = DEFAULT_REID_RECOVERY_WINDOW,
+        reid_recovery_thresh: float = DEFAULT_REID_RECOVERY_THRESH,
     ):
         self.track_thresh = track_thresh
         self.match_thresh = match_thresh  # min birlesik skor (0-1); altinda eslesme reddedilir
@@ -152,8 +186,12 @@ class AdaptiveTracker:
         self.weight_mode = weight_mode
         self.base_weights = tuple(base_weights)
         self.embedding_momentum = embedding_momentum
+        self.reid_recovery_enabled = reid_recovery_enabled
+        self.reid_recovery_window = reid_recovery_window
+        self.reid_recovery_thresh = reid_recovery_thresh
 
         self.tracks: list[AdaptiveTrack] = []
+        self.lost_gallery: list[LostTrack] = []
         self._next_id = 1
 
     def update(self, detections, frame, extractor=None) -> list[AdaptiveTrack]:
@@ -170,7 +208,9 @@ class AdaptiveTracker:
 
         if not self.tracks:
             for det, emb in zip(dets, det_embeddings):
-                self.tracks.append(self._new_track(det, emb))
+                revived = self._try_revive(det, emb, frame_diag)
+                self.tracks.append(revived if revived is not None else self._new_track(det, emb))
+            self._prune()  # tracks henuz taze (missed=0) -- bu sadece lost_gallery'yi yaslandirir
             return self.tracks
 
         if not dets:
@@ -197,7 +237,8 @@ class AdaptiveTracker:
 
         for j, det in enumerate(dets):
             if j not in matched_dets:
-                self.tracks.append(self._new_track(det, det_embeddings[j]))
+                revived = self._try_revive(det, det_embeddings[j], frame_diag)
+                self.tracks.append(revived if revived is not None else self._new_track(det, det_embeddings[j]))
 
         self._prune()
         return self.tracks
@@ -292,5 +333,67 @@ class AdaptiveTracker:
         self._next_id += 1
         return track
 
+    def _try_revive(self, det, embedding, frame_diag: float) -> AdaptiveTrack | None:
+        """lost_gallery'de bu tespitle yeterince benzer bir kimlik varsa
+        eski track_id'yi geri canlandirir; yoksa None doner (cagiran taraf
+        normal sekilde yeni bir track acar)."""
+        if not self.reid_recovery_enabled or not self.lost_gallery:
+            return None
+        if embedding is None or det.cls_name not in REID_ELIGIBLE_CLASSES:
+            return None
+
+        dcx, dcy = (det.xyxy[0] + det.xyxy[2]) / 2, (det.xyxy[1] + det.xyxy[3]) / 2
+        max_dist = MAX_RECOVERY_DIST_RATIO * frame_diag
+
+        best_idx, best_sim = -1, -1.0
+        for idx, lt in enumerate(self.lost_gallery):
+            if lt.cls_name != det.cls_name:
+                continue
+            lcx, lcy = (lt.last_xyxy[0] + lt.last_xyxy[2]) / 2, (lt.last_xyxy[1] + lt.last_xyxy[3]) / 2
+            if float(np.hypot(dcx - lcx, dcy - lcy)) > max_dist:
+                continue  # cok uzak -- gorunum benzerligi tek basina yetmez
+            sim = cosine_similarity(lt.embedding, embedding)  # ham [-1,1], (0,1]'e esitlenmemis
+            if sim > best_sim:
+                best_idx, best_sim = idx, sim
+
+        if best_idx == -1 or best_sim < self.reid_recovery_thresh:
+            return None
+
+        lost = self.lost_gallery.pop(best_idx)
+        return self._revive_track(lost, det, embedding)
+
+    def _revive_track(self, lost: LostTrack, det, embedding) -> AdaptiveTrack:
+        # Eski Kalman/history durumu kayip sure boyunca gecersiz hale
+        # gelmistir (bkz. LostTrack docstring) -- hareket sifirdan baslar,
+        # ama kimlik (track_id) ve gorunum (embedding, EMA ile harmanlanmis)
+        # korunur.
+        kalman = KalmanBoxTracker(det.xyxy)
+        area = (det.xyxy[2] - det.xyxy[0]) * (det.xyxy[3] - det.xyxy[1])
+        m = self.embedding_momentum
+        blended = m * lost.embedding + (1 - m) * embedding
+        blended = blended / (np.linalg.norm(blended) + 1e-8)
+        return AdaptiveTrack(
+            track_id=lost.track_id,
+            xyxy=det.xyxy,
+            cls_name=det.cls_name,
+            conf=det.conf,
+            kalman=kalman,
+            embedding=blended,
+            ref_area=area,
+            det_conf_ema=det.conf,
+            motion_conf=1.0,
+            reid_conf=max(0.0, (cosine_similarity(lost.embedding, embedding) + 1.0) / 2.0),
+        )
+
     def _prune(self) -> None:
-        self.tracks = [t for t in self.tracks if t.missed <= self.track_buffer]
+        still_active, newly_lost = [], []
+        for t in self.tracks:
+            if t.missed <= self.track_buffer:
+                still_active.append(t)
+            elif self.reid_recovery_enabled and t.embedding is not None and t.cls_name in REID_ELIGIBLE_CLASSES:
+                newly_lost.append(LostTrack(track_id=t.track_id, embedding=t.embedding, last_xyxy=t.xyxy, cls_name=t.cls_name))
+        self.tracks = still_active
+
+        for lt in self.lost_gallery:
+            lt.age += 1
+        self.lost_gallery = [lt for lt in self.lost_gallery if lt.age <= self.reid_recovery_window] + newly_lost

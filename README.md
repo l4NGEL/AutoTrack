@@ -188,41 +188,43 @@ MOTA/IDF1/ID-switch `motmetrics` kutuphanesinden, senaryolarla dogrulanmis.
 
 | Varyant | MOTA | IDF1 | ID Sw. | FPS |
 |---|---:|---:|---:|---:|
-| A. IOU-only | **22.0%** | **44.3%** | **9** | 35.1 |
-| B. IOU+Motion | 22.3% | 44.7% | 8 | 40.9 |
-| C. ReID-only | 26.2% | 41.0% | 16 | 16.3 |
-| D. Motion+ReID | 23.4% | 37.8% | 45 | 21.3 |
-| E. Adaptive | 20.5% | 36.5% | 35 | 21.2 |
+| A. IOU-only | **22.0%** | **44.3%** | **9** | 32.9 |
+| B. IOU+Motion | 22.3% | 44.7% | 8 | 37.5 |
+| C. ReID-only | 26.2% | 41.0% | 15 | 14.3 |
+| D. Motion+ReID | 23.4% | 37.1% | 44 | 19.0 |
+| E. Adaptive | 20.5% | 38.2% | 33 | 18.6 |
 
 **MOT17-04-FRCNN** (524 kare, 21451 GT kutusu — cok daha yogun/kalabalik):
 
 | Varyant | MOTA | IDF1 | ID Sw. | FPS |
 |---|---:|---:|---:|---:|
-| A. IOU-only | **29.2%** | **44.8%** | 23 | 33.1 |
-| B. IOU+Motion | 29.0% | 44.1% | **22** | 33.7 |
-| C. ReID-only | 25.0% | 37.9% | 62 | 16.2 |
-| D. Motion+ReID | 25.4% | 37.1% | 78 | 18.4 |
-| E. Adaptive | 28.6% | 43.1% | 26 | 18.0 |
+| A. IOU-only | **29.2%** | **44.8%** | 23 | 31.8 |
+| B. IOU+Motion | 29.0% | 44.1% | **22** | 29.6 |
+| C. ReID-only | 24.9% | 36.0% | 67 | 12.3 |
+| D. Motion+ReID | 25.4% | 36.7% | 78 | 13.9 |
+| E. Adaptive | 28.6% | 40.7% | 24 | 14.0 |
 
 (Kalin: her sutunda en iyi deger. Ham FPS notu: YOLOv8n conf=0.35 ile MOT17
 GT'sinin cogu kucuk/orta boy insan kutusu oldugundan MOTA mutlak degerleri
 her varyant icin dusuk kaliyor -- bu ablation'in amaci mutlak MOTA'yi
 yukseltmek degil, ayni dedektor/zemin dogrusu sabitken varyantlari birbirine
-karsi adil kiyaslamak.)
+karsi adil kiyaslamak. **Bu tablo `reid_recovery` (bkz. "Faz 2.1") dahil
+guncel varsayilanlarla calistirilmistir** — asagidaki analiz metni de buna
+gore guncellendi.)
 
 ### Ne oldu, neden
 
 1. **A/B (salt IOU, IOU+Motion) her iki sekansta da MOTA ve IDF1'de en iyisi.**
    Re-ID veya hareket eklemek, agirlikli olsun olmasin, bu iki sekansta
    dogrulugu artirmiyor.
-2. **Adaptive (E), C/D'nin (sabit ReID-agirlikli varyantlar) cok onunde** —
-   IDF1 D'ye gore +5-6 puan daha iyi, ID-switch sayisi D/C'nin yarisindan az.
-   Yani agirlik uyarlamasi tamamen ise yaramiyor degil: kotu sabit
-   agirliklandirmanin verdigi zarari belirgin sekilde azaltiyor, sadece
-   IOU-only baseline'ini gecmeye yetmiyor.
-3. **Adaptive'in baseline'a farki, daha yogun sekansta kuculuyor**: MOT17-02'de
-   MOTA farki 1.5 puan, MOT17-04'te (4.5x daha kalabalik, occlusion cok daha
-   sik) 0.6 puana iniyor ve ID-switch'te B'ye neredeyse esitleniyor (26 vs 22).
+2. **Adaptive (E), C/D'nin (sabit ReID-agirlikli varyantlar) onunde** — IDF1
+   MOT17-04'te D'ye gore +4.0 puan, MOT17-02'de +1.1 puan; ID-switch sayisi
+   MOT17-04'te D'nin ucte birinden az (24 vs 78). Yani agirlik uyarlamasi
+   tamamen ise yaramiyor degil: kotu sabit agirliklandirmanin verdigi zarari
+   azaltiyor, sadece IOU-only baseline'ini gecmeye yetmiyor.
+3. **Adaptive'in baseline'a MOTA farki, daha yogun sekansta kuculuyor**:
+   MOT17-02'de 1.5 puan, MOT17-04'te (4.5x daha kalabalik, occlusion cok daha
+   sik) 0.6 puana iniyor, ID-switch'te de B'ye neredeyse esitleniyor (24 vs 22).
    Bu, tasarim hipoteziyle (Re-ID occlusion'da daha cok yardimci olmali) yon
    olarak tutarli — ama 2 sekans istatistiksel olarak bunu KANITLAMAZ, sadece
    ipucu.
@@ -251,6 +253,81 @@ karsi adil kiyaslamak.)
 Bu bolumun amaci "yontem kazandi" demek degildi — gercekten olcup ne
 cikacagini gormekti. Cikan sonuc buydu.
 
+## Faz 2.1 — canli demo'da bulunan iki gercek hata (2026-08-27)
+
+Demo videosu izlenirken iki ayri sorun gozlemlendi ve ikisi de dogrulanip
+duzeltildi:
+
+### 1) ID-switch: kaybolan kimlik kurtarma (lost-track gallery)
+
+Gozlem: bir kisi bir sure izlenip kayboluyor, tekrar goründügünde yeni bir
+ID aliyor. `evaluation/trace_id_switches.py` yazilip demo klibi tekrar
+islendi: **16 aday ID-switch bulundu**, en netlerinden biri (20 kare bosluk,
+1px konum farki) 3 kareye kirpilarak gorsel olarak dogrulandi -- **onemli
+duzeltme: kisi bir seyin arkasinda degildi, tamamen gorunur ve hareketsizdi**
+(occlusion degil, muhtemelen ara sira tespit atlamasi + `track_buffer=30`
+asilinca eski track'in embedding'inin tamamen silinmesi).
+
+**Fix:** `tracking/adaptive_tracker.py`'ye bir "kayip kimlik galerisi"
+eklendi (`LostTrack`, `_try_revive`, `_revive_track` -- DeepSORT'un silinen
+track'leri bir sure eslestirme adayi tutma fikrinin basitlestirilmisi).
+Silinen bir track'in embedding'i `reid_recovery_window` (varsayilan 60) kare
+boyunca saklanir; bu sure icinde eslesmemis bir tespit gelirse, once ona
+karsi Re-ID benzerligi (`reid_recovery_thresh=0.75`, ham cosine) + kaba bir
+mesafe siniri (`MAX_RECOVERY_DIST_RATIO=0.5 * kare kosegeni`) kontrol edilir.
+Yeterince benzerse ID yeniden kullanilir. `config.yaml`'da
+`tracker.adaptive.reid_recovery_*` ile ayarlanabilir/kapatilabilir. 8 yeni
+birim test (`tests/test_adaptive_tracker.py`).
+
+**Sonuc — iki farkli olcekte, iki farkli buyuklukte:**
+
+| | Once | Sonra |
+|---|---:|---:|
+| Demo klibi, benzersiz track ID (heuristik) | 55 | **42** |
+| Demo klibi, `trace_id_switches.py` adayi | 16 | **2** |
+| MOT17-02, resmi ID-switch (motmetrics) | 35 | **33** |
+| MOT17-04, resmi ID-switch (motmetrics) | 26 | **24** |
+
+**Durustce soylemek gerekirse: demo klibindeki carpici iyilesme (55->42,
+16->2) ile resmi ablation'daki (motmetrics, gercek zemin dogrusuna karsi)
+iyilesme (birkaç birim) AYNI OLCEKTE DEGIL.** `trace_id_switches.py`
+sadece "bir track biter, yakinda yenisi baslar" seklinde kaba bir sezgisel
+arama yapiyor -- gercek zemin dogrusuna karsi dogrulanmiyor, bu yuzden
+gercekte farkli iki kisinin sirf yakin/ardisik olmasindan kaynaklanan bircok
+"sahte pozitif" adayi da sayiyor olabilir. Resmi metrik (motmetrics, gt.txt'e
+karsi) daha az etkileyici ama guvenilir olan sayi. Ayrica MOT17-04'te IDF1
+kotulesti (43.1%'den 40.7%'ye) -- kurtarma mekanizmasinin bir riski de bu:
+sadece gorunum+kaba mesafeyle "canlandirmak", bazen FARKLI ama benzer
+giyimli iki kisiyi yanlislikla birlestirebilir, ozellikle kalabalik
+sahnelerde. Yani bu, net bir kazanc degil, **fragmantasyon hatasini kismen
+birlestirme hatasi riskiyle takas eden, sekansa gore degisen bir iyilestirme.**
+
+### 2) "Hayalet kutu": tespit edilmemis track'ler cizilmiyordu
+
+Ayri bir gozlem: ekranda kimsenin olmadigi bir yerde kutu goruldu (bir
+direk/lamba civarinda, `[uncertain]` etiketli). Sebep: `AdaptiveTrack.xyxy`
+her karede Kalman TAHMINIYLE guncelleniyor -- bu tespit edilmemis
+(`missed>0`) track'ler icin de gecerli, ve `viz/overlay_renderer.py` bunlari
+gercek tespitmis gibi ayni sekilde ciziyordu. **Fix:** `draw_tracks()` artik
+sadece `missed==0` (bu karede gercekten eslesen) track'leri ciziyor;
+track'in kendisi hala hafizada kaliyor (buffer/kurtarma icin), sadece
+ekranda gosterilmiyor. HUD'daki hedef sayisi da ayni mantikla duzeltildi
+(`main.py`). 3 yeni birim test (`tests/test_overlay_renderer.py`).
+
+### 3) Yanlis alarm: ID 7, 23 ve 28 arastirmasi
+
+Kullanici videoyu izlerken ID 7'nin sirasiyla ID 57, 28 ve 23 oldugunu
+dusundu. `main.py`'nin birebir ayni kare-okuma sirasiyla (`_open_capture` +
+test-read + `CAP_PROP_POS_FRAMES=0` seek) lifecycle cikartilip kontrol
+edildi: **ID 7, 378 kare boyunca (klibin %72'si) KESINTISIZ takip edildi**
+ve son konumu kare kenarina cok yakindi (y≈5px, 1080px'lik kare) -- yani
+muhtemelen kadraj disina cikti. ID 23 kare 95'te, ID 28 kare 216'da zaten
+BASLAMISTI, yani ID 7 hala aktifken -- ikisi de ID 7 ile ayni anda var oldu,
+ID 7 "olamazlar". Kucuk/sikisik ekran yazisinin video sikistirmasinda
+karismis olmasi muhtemel. Bu ornek aslinda bir basari hikayesi: 378
+kesintisiz kare, sistemin dogru calistigi durumda ne kadar iyi oldugunu
+gosteriyor.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -272,6 +349,9 @@ cikacagini gormekti. Cikan sonuc buydu.
       IOU+Motion / ReID / Motion+ReID / Adaptive) — **calisti, ama Adaptive
       IOU-only baseline'ini gecemedi**; bkz. "Faz 2 sonuclari" icin sayilar
       ve neden analizi. HOTA bilinçli kapsam disi (bkz. `evaluation/mot_metrics.py`)
+- [x] **Faz 2.1:** canli demo'da bulunan iki gercek hata duzeltildi -- kayip
+      kimlik kurtarma (lost-track gallery) + hayalet-kutu cizim hatasi;
+      bkz. "Faz 2.1" bolumu icin durustce raporlanmis once/sonra sayilari
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, MOT domaininde
       Re-ID fine-tune, 7 sekansin tumunde tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
@@ -288,10 +368,13 @@ python -m evaluation.make_demo_video    # MOT17-04 karelerini tek video yapar
 python main.py --config config_demo.yaml    # data/demo_output.mp4 uretir
 ```
 
-Ortalama 524 kare boyunca **55 farkli track ID**, karede ortalama **16 kisi**,
-uctan uca (tespit+takip+ReID+HUD+video yazma dahil) **9.1 FPS** (RTX 2080).
-Tek karede ayni anda `stable`/`uncertain`/`lost_candidate` guven kovalarinin
-ucu de, hassas bolge tespiti ve gerekceli oncelik skoru gorunur durumda.
+Ortalama 524 kare boyunca **42 farkli track ID** (Faz 2.1'deki kayip-kimlik
+kurtarma sonrasi -- oncesinde 55'ti), karede ortalama **16 kisi**, uctan uca
+(tespit+takip+ReID+HUD+video yazma dahil) **~10.7 FPS** (RTX 2080). Tek
+karede ayni anda `stable`/`uncertain`/`lost_candidate` guven kovalarinin ucu
+de, hassas bolge tespiti ve gerekceli oncelik skoru gorunur durumda. Kutular
+artik sadece o karede gercekten eslesen track'ler icin ciziliyor (bkz. Faz
+2.1 #2 -- eskiden Kalman'in "hayalet" tahminleri de ciziliyordu).
 
 (Not: `main.py`'nin varsayilan `mp4v` video yazicisi disaridaki oynaticilarda
 sorunsuz calisiyor ama bu ortamdaki `cv2.VideoCapture` kendi yazdigi dosyayi

@@ -17,4 +17,4 @@ checkpoints/
 data/demo_*.mp4
 data/demo_*.png
 data/verify_*.png
-data/lifecycle_trace.json
+data/lifecycle_*.json

@@ -13,6 +13,9 @@ tracker:
     weight_mode: adaptive      # "adaptive" (dinamik) veya "fixed" (ablation icin sabit)
     base_weights: [0.4, 0.3, 0.3]  # alpha (IOU), beta (hareket), gamma (Re-ID)
     embedding_momentum: 0.9    # track embedding'i EMA ile guncellenir
+    reid_recovery_enabled: true    # silinen track'leri bir sure "kayip galeri"de tutup Re-ID ile geri canlandir
+    reid_recovery_window: 60   # kare -- silindikten sonra kimlik ne kadar sure aday kalir
+    reid_recovery_thresh: 0.75 # ham cosine benzerligi -- kurtarma icin gereken min esik (match_thresh'ten siki)
 
 reid:
   enabled: true

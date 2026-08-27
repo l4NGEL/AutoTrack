@@ -34,6 +34,9 @@ def _build_tracker(tracker_cfg: dict):
             weight_mode=a.get("weight_mode", "adaptive"),
             base_weights=tuple(a.get("base_weights", [0.4, 0.3, 0.3])),
             embedding_momentum=a.get("embedding_momentum", 0.9),
+            reid_recovery_enabled=a.get("reid_recovery_enabled", True),
+            reid_recovery_window=a.get("reid_recovery_window", 60),
+            reid_recovery_thresh=a.get("reid_recovery_thresh", 0.75),
         )
     else:
         tracker = ByteTracker(
@@ -120,9 +123,11 @@ def run(cfg: dict):
             fps = logger.tick()
             logger.log_frame(fps, len(detections), list(priority_results.values()), tracks)
 
+            visible_count = sum(1 for t in tracks if getattr(t, "missed", 0) == 0)
+
             frame = draw_zones(frame, zones)
             frame = draw_tracks(frame, tracks, priority_results)
-            frame = draw_hud(frame, fps, len(tracks))
+            frame = draw_hud(frame, fps, visible_count)  # draw_tracks ile tutarli olsun diye sadece bu karede goruleni say
 
             if writer:
                 writer.write(frame)

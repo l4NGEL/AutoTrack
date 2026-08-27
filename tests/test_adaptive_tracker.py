@@ -142,3 +142,119 @@ def test_track_pruned_after_buffer_exceeded():
 
 def test_base_weights_sum_to_one():
     assert abs(sum(DEFAULT_BASE_WEIGHTS) - 1.0) < 1e-9
+
+
+# --- Kayip kimlik kurtarma (lost-track gallery) --------------------------
+
+def _run_empty_frames(tracker, n, frame):
+    for _ in range(n):
+        tracker.update([], frame)
+
+
+def test_pruned_person_track_enters_lost_gallery():
+    tracker = AdaptiveTracker(track_buffer=5)
+    emb = np.zeros(8); emb[0] = 1.0
+    extractor = StubExtractor({10: emb})
+    tracker.update([_det((0, 0, 20, 20))], _frame(), extractor=extractor)
+
+    _run_empty_frames(tracker, 6, _frame())  # missed=6 > track_buffer=5
+
+    assert tracker.tracks == []
+    assert len(tracker.lost_gallery) == 1
+    assert tracker.lost_gallery[0].track_id == 1
+
+
+def test_pruned_non_person_track_not_added_to_gallery():
+    tracker = AdaptiveTracker(track_buffer=5)
+    tracker.update([_det((0, 0, 20, 20), cls_name="car")], _frame())
+
+    _run_empty_frames(tracker, 6, _frame())
+
+    assert tracker.tracks == []
+    assert tracker.lost_gallery == []  # arac icin gecerli embedding uzayi yok
+
+
+def test_pruned_track_without_embedding_not_added_to_gallery():
+    tracker = AdaptiveTracker(track_buffer=5)
+    tracker.update([_det((0, 0, 20, 20))], _frame())  # extractor=None -> embedding yok
+
+    _run_empty_frames(tracker, 6, _frame())
+
+    assert tracker.lost_gallery == []
+
+
+def test_revival_reuses_old_track_id_when_appearance_matches():
+    tracker = AdaptiveTracker(track_buffer=5, reid_recovery_thresh=0.9)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    _run_empty_frames(tracker, 6, _frame())
+    assert tracker.tracks == [] and len(tracker.lost_gallery) == 1
+
+    # Ayni konumda, ayni gorunumde biri "geri donuyor".
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: emb})
+    )
+    assert len(tracks) == 1
+    assert tracks[0].track_id == 1  # yeni ID degil, eski kimlik geri geldi
+    assert tracker.lost_gallery == []  # galeriden dustu
+
+
+def test_revival_rejected_when_appearance_does_not_match():
+    tracker = AdaptiveTracker(track_buffer=5, reid_recovery_thresh=0.9)
+    emb_a = np.zeros(8); emb_a[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb_a}))
+
+    _run_empty_frames(tracker, 6, _frame())
+
+    emb_b = np.zeros(8); emb_b[1] = 1.0  # tamamen farkli gorunum
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: emb_b})
+    )
+    assert tracks[0].track_id == 2  # eslesme reddedildi, yeni ID verildi
+    assert len(tracker.lost_gallery) == 1  # eski kimlik hala aday olarak bekliyor
+
+
+def test_revival_rejected_when_too_far_from_last_position():
+    tracker = AdaptiveTracker(track_buffer=5, reid_recovery_thresh=0.9)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    _run_empty_frames(tracker, 6, _frame())
+
+    # Ayni gorunum ama frame'in tam diger ucunda -- fiziksel olarak mantiksiz.
+    tracks = tracker.update(
+        [_det((600, 440, 620, 480))], _frame(), extractor=StubExtractor({610: emb})
+    )
+    assert tracks[0].track_id == 2
+
+
+def test_lost_gallery_entry_ages_out_after_recovery_window():
+    tracker = AdaptiveTracker(track_buffer=2, reid_recovery_window=3, reid_recovery_thresh=0.9)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    _run_empty_frames(tracker, 3, _frame())  # missed=3 > track_buffer=2 -> lost_gallery'ye girer
+    assert len(tracker.lost_gallery) == 1
+
+    _run_empty_frames(tracker, 4, _frame())  # galeride 4 kare yaslandi > reid_recovery_window=3
+    assert tracker.lost_gallery == []
+
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: emb})
+    )
+    assert tracks[0].track_id != 1  # cok gec kaldi, kimlik artik kurtarilamaz
+
+
+def test_reid_recovery_can_be_disabled():
+    tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    _run_empty_frames(tracker, 6, _frame())
+    assert tracker.lost_gallery == []  # mekanizma kapali, hic biriktirme yok
+
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: emb})
+    )
+    assert tracks[0].track_id == 2  # kurtarma denenmedi, dogrudan yeni ID
