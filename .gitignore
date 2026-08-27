@@ -16,3 +16,5 @@ checkpoints/
 # Demo videolari (buyuk, evaluation/make_demo_video.py + main.py ile yeniden uretilebilir)
 data/demo_*.mp4
 data/demo_*.png
+data/verify_*.png
+data/lifecycle_trace.json
