@@ -60,7 +60,17 @@ MIN_CROP_AREA_RATIO = 0.15  # referans (ilk gorulen) alana oran
 # Kayip kimlik kurtarma (lost-track gallery) icin varsayilanlar
 DEFAULT_REID_RECOVERY_WINDOW = 60  # kare -- track_buffer'dan sonra kimlik ne kadar sure "aday" kalir
 DEFAULT_REID_RECOVERY_THRESH = 0.75  # ham cosine benzerligi (mapped [0,1] degil) -- match_thresh'ten siki
-MAX_RECOVERY_DIST_RATIO = 0.5  # kare kosegenine oran -- bunun otesindeki "benzer" eslesmeler reddedilir
+MAX_RECOVERY_DIST_RATIO = 0.2  # kare kosegenine oran -- bunun otesindeki "benzer" eslesmeler reddedilir
+                                # (2026-08-27: 0.5 idi, gercek bir yanlis-birlestirme bulundu ve sikilastirildi -- bkz. README "Faz 2.2")
+
+# Tek karede fiziksel olarak imkansiz "ziplamalari" onleyen sert mesafe siniri.
+# Adaptif agirliklandirma occlusion/hiz sinyaline gore alpha'yi (IOU) cok
+# dusurdugunde, guclu ama YANLIS bir Re-ID/hareket skoru teorik olarak
+# tamamen alakasiz bir tespitle eslesmeyi "kazanabilir" -- kombine skor
+# yeterince yuksek gorunse bile boyle bir eslesme fiziksel olarak imkansizdir.
+# Bu, agirliklardan BAGIMSIZ bir on-eleme: mesafe asilirsa skor ne olursa
+# olsun eslesme reddedilir.
+MAX_ASSOCIATION_DIST_RATIO = 0.15  # kare kosegenine oran, TEK kare icin
 
 
 class Confidence(Enum):
@@ -85,6 +95,7 @@ class AdaptiveTrack:
     motion_conf: float = 1.0
     reid_conf: float = 0.0
     weights_used: tuple = DEFAULT_BASE_WEIGHTS
+    last_confirmed_xyxy: tuple | None = None  # son GERCEK eslesmedeki konum -- xyxy'nin aksine Kalman ekstrapolasyonuyla surunmez
 
     @property
     def center(self):
@@ -256,6 +267,7 @@ class AdaptiveTracker:
         return embeddings
 
     def _cost_matrix(self, dets, det_embeddings, predicted_boxes, frame_diag):
+        max_dist = MAX_ASSOCIATION_DIST_RATIO * frame_diag
         cost = np.ones((len(self.tracks), len(dets)))
         for i, t in enumerate(self.tracks):
             if self.weight_mode == "adaptive":
@@ -263,7 +275,11 @@ class AdaptiveTracker:
             else:
                 weights = self._masked_fixed_weights(t)
             alpha, beta, gamma = weights
+            tcx, tcy = t.center
             for j, d in enumerate(dets):
+                dcx, dcy = (d.xyxy[0] + d.xyxy[2]) / 2, (d.xyxy[1] + d.xyxy[3]) / 2
+                if float(np.hypot(dcx - tcx, dcy - tcy)) > max_dist:
+                    continue  # skor ne olursa olsun: tek karede bu kadar uzaga ziplamak fiziksel olarak imkansiz
                 s_iou = iou(t.xyxy, d.xyxy)
                 s_motion = self._motion_score(t, d, frame_diag)
                 s_reid = self._reid_score(t, det_embeddings[j])
@@ -297,6 +313,7 @@ class AdaptiveTracker:
         track.history.append(track.center)
         track.kalman.update(det.xyxy)
         track.xyxy = det.xyxy
+        track.last_confirmed_xyxy = det.xyxy
         track.cls_name = det.cls_name
         track.conf = det.conf
         track.age += 1
@@ -329,6 +346,7 @@ class AdaptiveTracker:
             det_conf_ema=det.conf,
             motion_conf=1.0,
             reid_conf=0.0,
+            last_confirmed_xyxy=det.xyxy,
         )
         self._next_id += 1
         return track
@@ -383,6 +401,7 @@ class AdaptiveTracker:
             det_conf_ema=det.conf,
             motion_conf=1.0,
             reid_conf=max(0.0, (cosine_similarity(lost.embedding, embedding) + 1.0) / 2.0),
+            last_confirmed_xyxy=det.xyxy,
         )
 
     def _prune(self) -> None:
@@ -391,7 +410,11 @@ class AdaptiveTracker:
             if t.missed <= self.track_buffer:
                 still_active.append(t)
             elif self.reid_recovery_enabled and t.embedding is not None and t.cls_name in REID_ELIGIBLE_CLASSES:
-                newly_lost.append(LostTrack(track_id=t.track_id, embedding=t.embedding, last_xyxy=t.xyxy, cls_name=t.cls_name))
+                # last_xyxy = son GERCEK tespit (last_confirmed_xyxy), t.xyxy DEGIL --
+                # t.xyxy burada zaten track_buffer kadar Kalman ekstrapolasyonuyla
+                # surunmus olabilir, kurtarma mesafe kontrolu icin guvenilmez.
+                ref_box = t.last_confirmed_xyxy or t.xyxy
+                newly_lost.append(LostTrack(track_id=t.track_id, embedding=t.embedding, last_xyxy=ref_box, cls_name=t.cls_name))
         self.tracks = still_active
 
         for lt in self.lost_gallery:

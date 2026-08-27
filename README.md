@@ -253,9 +253,10 @@ gore guncellendi.)
 Bu bolumun amaci "yontem kazandi" demek degildi — gercekten olcup ne
 cikacagini gormekti. Cikan sonuc buydu.
 
-## Faz 2.1 — canli demo'da bulunan iki gercek hata (2026-08-27)
+## Faz 2.1 — canli demo'da bulunan uc gercek hata (2026-08-27)
 
-Demo videosu izlenirken iki ayri sorun gozlemlendi ve ikisi de dogrulanip
+Demo videosu izlenirken (kullanicinin ekran goruntuleriyle) uc ayri sorun
+gozlemlendi; ucu de arastirilip dogrulandi, ikisi gercek hataydi ve
 duzeltildi:
 
 ### 1) ID-switch: kaybolan kimlik kurtarma (lost-track gallery)
@@ -314,19 +315,55 @@ track'in kendisi hala hafizada kaliyor (buffer/kurtarma icin), sadece
 ekranda gosterilmiyor. HUD'daki hedef sayisi da ayni mantikla duzeltildi
 (`main.py`). 3 yeni birim test (`tests/test_overlay_renderer.py`).
 
-### 3) Yanlis alarm: ID 7, 23 ve 28 arastirmasi
+### 3) ID 7, 23, 28 arastirmasi -- yanlis alarm, ama sezgi dogruydu
 
 Kullanici videoyu izlerken ID 7'nin sirasiyla ID 57, 28 ve 23 oldugunu
-dusundu. `main.py`'nin birebir ayni kare-okuma sirasiyla (`_open_capture` +
-test-read + `CAP_PROP_POS_FRAMES=0` seek) lifecycle cikartilip kontrol
-edildi: **ID 7, 378 kare boyunca (klibin %72'si) KESINTISIZ takip edildi**
-ve son konumu kare kenarina cok yakindi (y≈5px, 1080px'lik kare) -- yani
-muhtemelen kadraj disina cikti. ID 23 kare 95'te, ID 28 kare 216'da zaten
-BASLAMISTI, yani ID 7 hala aktifken -- ikisi de ID 7 ile ayni anda var oldu,
-ID 7 "olamazlar". Kucuk/sikisik ekran yazisinin video sikistirmasinda
-karismis olmasi muhtemel. Bu ornek aslinda bir basari hikayesi: 378
-kesintisiz kare, sistemin dogru calistigi durumda ne kadar iyi oldugunu
-gosteriyor.
+dusundu. `main.py`'nin birebir ayni kare-okuma sirasiyla lifecycle
+cikartilip kontrol edildi: **ID 7, 378 kare boyunca (klibin %72'si)
+KESINTISIZ takip edildi** ve son konumu kare kenarina cok yakindi (y≈5px,
+1080px'lik kare) -- kadraj disina cikti. ID 23 kare 95'te, ID 28 kare
+216'da zaten BASLAMISTI, yani ID 7 hala aktifken -- ID 7 bu ikisi
+"olamazdi", bu spesifik iddia yanlisti.
+
+Ama kullanici ISRAR ETTI ve iki ayri kareden ayni gorunumlu (siyah kiyafet,
+beyaz spor ayakkabi) bir kisiyi farkli ID'lerle (23 ve 7) gosteren ekran
+goruntuleri paylasti. Bu sefer sadece ilk/son degil, ID 7 ve 23'un TUM
+kare-kare konumlari cikartildi -- ve bu arastirma **gercek, ayri bir hata**
+buldu (bkz. asagida). **Kullanicinin sezgisi dogruydu, sadece hangi ID
+ciftinin yanlis oldugunu tam isaret edememisti.**
+
+### 4) Asil hata: kayip galeride yanlis birlestirme (gercek kok neden)
+
+ID 23'un kare-kare verisinde carpici bir sey bulundu: kare 227'de konum
+(1177, 679, 1259, 930), kare 228'de (492, 565, 555, 805) -- **TEK KAREDE
+685 piksel ziplama**, fiziksel olarak imkansiz. Bu, kayip-galeri devreye
+girmeden ONCE, **normal Hungarian eslesmesinin kendisinde** oldu: `conf`
+0.79'dan 0.54'e dustu, yani bu aslinda BASKA bir kisiyle yanlis eslesmeydi.
+Bu yanlis eslesmeden sonra Kalman 30 kare boyunca (artik gecersiz) bu
+konumdan ekstrapolasyon yapti (kare 255'te kutu **bos zeminde** oldugu
+gorsel olarak dogrulandi), track_buffer asilinca kayip galeriye
+tasindi -- ve kare 295'te uzak baska bir konumda "canlandirildi".
+
+**Kok neden:** adaptif agirliklandirma, occlusion/hiz sinyaline gore
+alpha'yi (IOU) yeterince dusurdugunde, kalabalik bir sahnede TESADUFEN
+guclu bir Re-ID/hareket skoru, IOU=0 olsa bile kombine skoru
+`match_thresh`'in ustune cikarabiliyordu -- yani mesafeyle ilgili hicbir
+sinir yoktu.
+
+**Fix (`tracking/adaptive_tracker.py`):**
+- `MAX_ASSOCIATION_DIST_RATIO=0.15` (kare kosegeninin %15'i): birincil
+  eslesmede, agirliklardan BAGIMSIZ sert bir mesafe on-elemesi -- skor ne
+  olursa olsun, bu mesafenin otesindeki ciftler hic degerlendirilmiyor.
+- `MAX_RECOVERY_DIST_RATIO` kayip-galeri icin 0.5'ten **0.2**'ye sikilastirildi.
+- `LostTrack.last_xyxy` artik `t.xyxy` (Kalman'in surunmus tahmini) yerine
+  `t.last_confirmed_xyxy` (son GERCEK tespit) kullaniyor -- kurtarma mesafe
+  kontrolu artik guvenilir bir referans noktasina karsi calisiyor.
+
+**Dogrulama:** tum 524 kare uzerinde, ardisik iki gercek tespit arasindaki
+EN BUYUK merkez sicramasi artik **80px** (once: 685px, sinir: 330px) --
+tarafsiz bir script ile (`tests/` disinda, tek seferlik) tum track'ler
+taranarak dogrulandi. 1 yeni birim test
+(`test_impossible_single_frame_jump_is_rejected_even_with_matching_appearance`).
 
 ## Yol haritasi
 
@@ -349,9 +386,11 @@ gosteriyor.
       IOU+Motion / ReID / Motion+ReID / Adaptive) — **calisti, ama Adaptive
       IOU-only baseline'ini gecemedi**; bkz. "Faz 2 sonuclari" icin sayilar
       ve neden analizi. HOTA bilinçli kapsam disi (bkz. `evaluation/mot_metrics.py`)
-- [x] **Faz 2.1:** canli demo'da bulunan iki gercek hata duzeltildi -- kayip
-      kimlik kurtarma (lost-track gallery) + hayalet-kutu cizim hatasi;
-      bkz. "Faz 2.1" bolumu icin durustce raporlanmis once/sonra sayilari
+- [x] **Faz 2.1:** canli demo'da bulunan uc gercek hata bulundu/duzeltildi --
+      kayip kimlik kurtarma (lost-track gallery), hayalet-kutu cizim hatasi,
+      ve kayip-galeride yanlis birlestirmeye yol acan mesafesiz eslesme
+      (kok neden: sert mesafe siniri eklendi); bkz. "Faz 2.1" bolumu icin
+      durustce raporlanmis once/sonra sayilari
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, MOT domaininde
       Re-ID fine-tune, 7 sekansin tumunde tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
@@ -368,13 +407,17 @@ python -m evaluation.make_demo_video    # MOT17-04 karelerini tek video yapar
 python main.py --config config_demo.yaml    # data/demo_output.mp4 uretir
 ```
 
-Ortalama 524 kare boyunca **42 farkli track ID** (Faz 2.1'deki kayip-kimlik
-kurtarma sonrasi -- oncesinde 55'ti), karede ortalama **16 kisi**, uctan uca
-(tespit+takip+ReID+HUD+video yazma dahil) **~10.7 FPS** (RTX 2080). Tek
-karede ayni anda `stable`/`uncertain`/`lost_candidate` guven kovalarinin ucu
-de, hassas bolge tespiti ve gerekceli oncelik skoru gorunur durumda. Kutular
-artik sadece o karede gercekten eslesen track'ler icin ciziliyor (bkz. Faz
-2.1 #2 -- eskiden Kalman'in "hayalet" tahminleri de ciziliyordu).
+Ortalama 524 kare boyunca **43 farkli track ID** (Faz 2.1'deki kayip-kimlik
+kurtarma + mesafe siniri sonrasi -- oncesinde 55'ti), karede ortalama **16
+kisi**, uctan uca (tespit+takip+ReID+HUD+video yazma dahil) tipik olarak
+~9-11 FPS (RTX 2080; bu oturumda arka arkaya cok sayida GPU isi
+calistirildigi icin tek tek calistirmalar arasi FPS gozle gorulur sekilde
+degisebiliyor -- bu tek-makinelik bir gozlem, kalici bir performans iddiasi
+degil). Tek karede ayni anda `stable`/`uncertain`/`lost_candidate` guven
+kovalarinin ucu de, hassas bolge tespiti ve gerekceli oncelik skoru gorunur
+durumda. Kutular artik sadece o karede gercekten eslesen track'ler icin
+ciziliyor (bkz. Faz 2.1 #2 -- eskiden Kalman'in "hayalet" tahminleri de
+ciziliyordu).
 
 (Not: `main.py`'nin varsayilan `mp4v` video yazicisi disaridaki oynaticilarda
 sorunsuz calisiyor ama bu ortamdaki `cv2.VideoCapture` kendi yazdigi dosyayi

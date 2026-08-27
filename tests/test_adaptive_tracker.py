@@ -246,6 +246,29 @@ def test_lost_gallery_entry_ages_out_after_recovery_window():
     assert tracks[0].track_id != 1  # cok gec kaldi, kimlik artik kurtarilamaz
 
 
+def test_impossible_single_frame_jump_is_rejected_even_with_matching_appearance():
+    """2026-08-27: kullanicinin gozlemledigi gercek bir hatanin kok nedeni --
+    kalabalik bir sahnede adaptif agirlik alpha'yi (IOU) cok dusurdugunde,
+    guclu ama tesadufi bir Re-ID benzerligi, fiziksel olarak imkansiz bir
+    ziplamayi (tek karede >700px) "kazanabiliyordu". Simdi mesafe, skordan
+    BAGIMSIZ sert bir on-elemeden geciyor."""
+    tracker = AdaptiveTracker()
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    # Ayni (kusursuz eslesen) gorunum, ama frame'in tam diger ucunda --
+    # tek karede boyle bir mesafe imkansiz.
+    tracks = tracker.update(
+        [_det((600, 440, 620, 480))], _frame(), extractor=StubExtractor({610: emb})
+    )
+    ids = {t.track_id for t in tracks}
+    assert ids == {1, 2}  # eski track (eslenmedi, missed=1) hala hafizada + yeni track (2) acildi
+    new_track = next(t for t in tracks if t.track_id == 2)
+    assert new_track.missed == 0
+    old_track = next(t for t in tracks if t.track_id == 1)
+    assert old_track.missed == 1  # eski track'e YANLISLIKLA eslenmedi
+
+
 def test_reid_recovery_can_be_disabled():
     tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
     emb = np.zeros(8); emb[0] = 1.0
