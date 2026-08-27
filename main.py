@@ -92,6 +92,11 @@ def run(cfg: dict):
 
     writer = None
     if cfg["output"]["save_video"]:
+        # mp4v disaridaki oynaticilarda (VLC, tarayici, ffprobe) sorunsuz
+        # calisiyor, ama bu ortamdaki cv2.VideoCapture kendi yazdigi mp4v
+        # dosyasini geri acamiyor (isOpened()=False) -- kareyi tekrar cv2
+        # ile okumak gerekirse once ffmpeg ile H.264'e cevirin (bkz.
+        # evaluation/make_demo_video.py'nin yaninda calistirilan ornek).
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         width, height = int(cap.get(3)), int(cap.get(4))
         writer = cv2.VideoWriter(cfg["output"]["output_path"], fourcc, 20.0, (width, height))

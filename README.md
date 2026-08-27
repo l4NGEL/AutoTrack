@@ -274,7 +274,29 @@ cikacagini gormekti. Cikan sonuc buydu.
       ve neden analizi. HOTA bilinçli kapsam disi (bkz. `evaluation/mot_metrics.py`)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, MOT domaininde
       Re-ID fine-tune, 7 sekansin tumunde tekrar
-- [ ] Demo video, GitHub yayini
+- [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
+- [ ] GitHub yayini
+
+## Demo video
+
+Canli webcam yerine (bos oda garantisi yok) gercek, kalabalik bir sokak
+sahnesi (MOT17-04-FRCNN, 524 kare) `config_demo.yaml` ile calistirildi --
+Faz 2'nin gercek egitilmis Re-ID checkpoint'i devrede:
+
+```bash
+python -m evaluation.make_demo_video    # MOT17-04 karelerini tek video yapar
+python main.py --config config_demo.yaml    # data/demo_output.mp4 uretir
+```
+
+Ortalama 524 kare boyunca **55 farkli track ID**, karede ortalama **16 kisi**,
+uctan uca (tespit+takip+ReID+HUD+video yazma dahil) **9.1 FPS** (RTX 2080).
+Tek karede ayni anda `stable`/`uncertain`/`lost_candidate` guven kovalarinin
+ucu de, hassas bolge tespiti ve gerekceli oncelik skoru gorunur durumda.
+
+(Not: `main.py`'nin varsayilan `mp4v` video yazicisi disaridaki oynaticilarda
+sorunsuz calisiyor ama bu ortamdaki `cv2.VideoCapture` kendi yazdigi dosyayi
+geri okuyamiyor -- kareyi programatik incelemek icin once ffmpeg ile H.264'e
+cevirmek gerekti, bkz. `main.py`'deki ilgili yorum.)
 
 ## Veri seti secimi
 

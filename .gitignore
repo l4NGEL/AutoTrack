@@ -12,3 +12,7 @@ data/output.mp4
 data/market1501/
 data/MOT17/
 checkpoints/
+
+# Demo videolari (buyuk, evaluation/make_demo_video.py + main.py ile yeniden uretilebilir)
+data/demo_*.mp4
+data/demo_*.png

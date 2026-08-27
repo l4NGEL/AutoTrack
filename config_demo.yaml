@@ -1,0 +1,42 @@
+# Demo/gorsel dogrulama konfigurasyonu: canli webcam yerine gercek, kalabalik
+# bir sokak sahnesi (MOT17-04-FRCNN, once "python -m evaluation.make_demo_video"
+# ile uretilmis) uzerinde calisir, Faz 2'nin gercek egitilmis Re-ID
+# checkpoint'ini kullanir ve overlay'li ciktiyi data/demo_output.mp4'e kaydeder.
+#
+# Kullanim: python main.py --config config_demo.yaml
+
+source: data/demo_mot17_04.mp4
+model_weights: yolov8n.pt
+conf_threshold: 0.35
+classes: [0]                  # sadece 'person' (COCO sinif 0) -- Re-ID zaten sadece bunun icin gecerli
+
+tracker:
+  type: adaptive
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.8
+  adaptive:
+    match_thresh: 0.3
+    weight_mode: adaptive
+    base_weights: [0.4, 0.3, 0.3]
+    embedding_momentum: 0.9
+
+reid:
+  enabled: true
+  model_name: osnet_x1_0
+  checkpoint_path: checkpoints/osnet_market1501/model/model.pth.tar-15  # Faz 2'nin gercek egitilmis agirligi
+  input_size: [256, 128]
+
+zones:
+  - name: hassas_bolge_1
+    polygon: [[700, 300], [1400, 300], [1400, 900], [700, 900]]
+
+priority_weights:
+  speed: 0.4
+  zone: 0.4
+  dwell_time: 0.2
+
+output:
+  save_video: true
+  output_path: data/demo_output.mp4
+  log_path: data/logs/demo_session.jsonl
