@@ -1,0 +1,46 @@
+# config_demo.yaml ile ayni, ama farkli bir sekans (MOT17-02-FRCNN) --
+# kullanicinin "baska bir videoda dene" istegi uzerine, MOT17-04'ten
+# bagimsiz bir dogrulama icin.
+#
+# Kullanim:
+#   python -m evaluation.make_demo_video --sequence MOT17-02-FRCNN
+#   python main.py --config config_demo_mot02.yaml
+
+source: data/demo_mot17_02_frcnn.mp4
+model_weights: yolov8n.pt
+conf_threshold: 0.35
+classes: [0]
+
+tracker:
+  type: adaptive
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.8
+  adaptive:
+    match_thresh: 0.3
+    weight_mode: adaptive
+    base_weights: [0.4, 0.3, 0.3]
+    embedding_momentum: 0.9
+    reid_recovery_enabled: true
+    reid_recovery_window: 60
+    reid_recovery_thresh: 0.75
+
+reid:
+  enabled: true
+  model_name: osnet_x1_0
+  checkpoint_path: checkpoints/osnet_market1501/model/model.pth.tar-15
+  input_size: [256, 128]
+
+zones:
+  - name: hassas_bolge_1
+    polygon: [[700, 300], [1400, 300], [1400, 900], [700, 900]]
+
+priority_weights:
+  speed: 0.4
+  zone: 0.4
+  dwell_time: 0.2
+
+output:
+  save_video: true
+  output_path: data/demo_output_mot02.mp4
+  log_path: data/logs/demo_session_mot02.jsonl
