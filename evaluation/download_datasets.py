@@ -20,7 +20,8 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download, snapshot_download
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-MOT17_SEQUENCES = ["MOT17-02-FRCNN", "MOT17-04-FRCNN"]
+MOT17_EVAL_SEQUENCES = ["MOT17-02-FRCNN", "MOT17-04-FRCNN"]  # evaluation/run_ablation.py -- asla egitimde kullanilmaz
+MOT17_FINETUNE_SEQUENCES = ["MOT17-09-FRCNN", "MOT17-11-FRCNN"]  # evaluation/finetune_reid_mot.py -- asla degerlendirmede kullanilmaz
 
 
 def download_market1501():
@@ -49,9 +50,9 @@ def download_market1501():
         print(f"[market1501] UYARI: beklenen yol yok, bulunanlar: {found}")
 
 
-def download_mot17():
+def download_mot17(sequences=MOT17_EVAL_SEQUENCES):
     target = DATA_DIR / "MOT17"
-    for seq in MOT17_SEQUENCES:
+    for seq in sequences:
         marker = target / seq / "gt" / "gt.txt"
         if marker.is_file():
             print(f"[MOT17] {seq} zaten mevcut")
@@ -78,7 +79,7 @@ def download_mot17():
 
             shutil.rmtree(target / "_raw", ignore_errors=True)
 
-    for seq in MOT17_SEQUENCES:
+    for seq in sequences:
         gt = target / seq / "gt" / "gt.txt"
         n_frames = len(list((target / seq / "img1").glob("*.jpg"))) if (target / seq / "img1").is_dir() else 0
         print(f"[MOT17] {seq}: gt.txt {'var' if gt.is_file() else 'YOK'}, {n_frames} kare")
@@ -87,4 +88,5 @@ def download_mot17():
 if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     download_market1501()
-    download_mot17()
+    download_mot17(MOT17_EVAL_SEQUENCES)
+    download_mot17(MOT17_FINETUNE_SEQUENCES)

@@ -27,7 +27,7 @@ tracker:
 reid:
   enabled: true
   model_name: osnet_x1_0
-  checkpoint_path: checkpoints/osnet_market1501/model/model.pth.tar-15  # Faz 2'nin gercek egitilmis agirligi
+  checkpoint_path: checkpoints/osnet_mot_finetuned/model.pth.tar  # Faz 2.3: MOT-domaininde fine-tune edilmis (Faz 2'nin Market-1501 checkpoint'inden daha iyi)
   input_size: [256, 128]
 
 zones:

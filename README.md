@@ -365,6 +365,52 @@ tarafsiz bir script ile (`tests/` disinda, tek seferlik) tum track'ler
 taranarak dogrulandi. 1 yeni birim test
 (`test_impossible_single_frame_jump_is_rejected_even_with_matching_appearance`).
 
+## Faz 2.3 — domain-adaptive Re-ID fine-tune: ilk net kazanc (2026-08-27)
+
+Kullanicinin "model mi egitsek" onerisi uzerine, Faz 2'nin ana bulgusu olan
+**domain gap** hipotezini gercekten test ettik: OSNet'i Market-1501'in
+kirpilmis/kontrollu goruntuleri yerine, MOT17'nin kendi (guvenlik kamerasi
+acili, farkli cozunurluklu) goruntuleriyle fine-tune ettik.
+
+**Metodoloji -- sizinti (leakage) olmasin diye:** fine-tune verisi
+**MOT17-09 + MOT17-11**'den (`evaluation/extract_mot_reid_crops.py`, gt.txt
+kimlikleri zayif etiket olarak) geldi -- **degerlendirmede kullanilan
+MOT17-02/04'e kesinlikle dokunulmadi.** 62 kimlik, 5216 kirpim.
+`evaluation/finetune_reid_mot.py`, Faz 2'nin Market-1501 checkpoint'ini
+baslangic noktasi alip 15 epoch ince ayar yapti (lr=0.0003, Faz 2'nin
+0.0015'inden dusuk -- sifirdan degil, ustune ekleme).
+
+**Durustce not:** train accuracy epoch 5'ten itibaren **%100**'e ulasti --
+sadece 62 kimlikle bu beklenir ve ezberleme (overfitting) riskini gosterir.
+Bunun gercekten ise yarayip yaramadigini anlamanin tek yolu tamamen ayri
+tutulan MOT17-02/04'te tekrar olcmekti.
+
+**Sonuc -- E_Adaptive, `--checkpoint checkpoints/osnet_mot_finetuned/model.pth.tar` ile:**
+
+| Sekans | Metrik | Faz 2.2 (Market-1501) | Faz 2.3 (MOT fine-tune) | A. IOU-only (baseline) |
+|---|---|---:|---:|---:|
+| MOT17-02 | MOTA | 20.5% | **24.0%** | 22.0% |
+| MOT17-02 | IDF1 | 38.2% | **48.4%** | 44.3% |
+| MOT17-02 | ID Sw. | 33 | **7** | 9 |
+| MOT17-04 | MOTA | 28.6% | 28.9% | 29.2% |
+| MOT17-04 | IDF1 | 40.7% | **43.0%** | 44.8% |
+| MOT17-04 | ID Sw. | 24 | **20** | 23 |
+
+**MOT17-02'de Adaptive artik ucu de metrikte (MOTA, IDF1, ID-switch) baseline'i
+GECIYOR -- bu projede ilk kez.** MOT17-04'te MOTA/IDF1 hala baseline'in
+biraz altinda ama fark kuculdu ve ID-switch'te simdi Adaptive daha iyi
+(20 vs 23). A/B (ReID kullanmayan varyantlar) beklendigi gibi **birebir
+ayni** kaldi -- checkpoint degisikligi sadece ReID kullanan varyantlari
+etkiledi, bu da degisikligin dogru izole edildigini dogruluyor.
+
+**Yorum:** domain gap hipotezi dogrulandi -- ayni mimari, ayni ablation
+kodu, tek fark Re-ID agirliklarinin egitildigi veri. Ama abartmayalim: 62
+kimlik kucuk bir ornek, %100 train accuracy'nin genellemeyi ne kadar
+yansittigi belirsiz, ve MOT17-04'te hala tam bir zafer yok. Daha fazla
+sekans (7'nin tumu, egitim/degerlendirme ayrimini koruyarak) ve gercek bir
+validation split ile tekrarlanmadan bu sonucu "kanitlanmis" saymayin --
+ama yon net: dogru yonde, ve MOT17-02'de gercek, olculebilir bir kazanc var.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -391,8 +437,12 @@ taranarak dogrulandi. 1 yeni birim test
       ve kayip-galeride yanlis birlestirmeye yol acan mesafesiz eslesme
       (kok neden: sert mesafe siniri eklendi); bkz. "Faz 2.1" bolumu icin
       durustce raporlanmis once/sonra sayilari
-- [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, MOT domaininde
-      Re-ID fine-tune, 7 sekansin tumunde tekrar
+- [x] **Faz 2.3:** MOT domaininde Re-ID fine-tune (MOT17-09/11'den, 02/04'e
+      dokunmadan) — **MOT17-02'de Adaptive artik uc metrikte de baseline'i
+      geciyor** (ilk kez); bkz. "Faz 2.3" bolumu icin sayilar ve durustce
+      belirtilen sinirlamalar (62 kimlik, %100 train acc = overfitting riski)
+- [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
+      tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
 - [ ] GitHub yayini
 

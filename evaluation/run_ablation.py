@@ -12,7 +12,9 @@ degerlendirme de onu kullaniyor).
 
 Kullanim:
     python -m evaluation.run_ablation
+    python -m evaluation.run_ablation --checkpoint checkpoints/osnet_mot_finetuned/model.pth.tar
 """
+import argparse
 import time
 from pathlib import Path
 
@@ -25,7 +27,7 @@ from tracking.adaptive_tracker import AdaptiveTracker
 from tracking.bytetrack_wrapper import ByteTracker
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "MOT17"
-CHECKPOINT = Path(__file__).resolve().parent.parent / "checkpoints" / "osnet_market1501" / "model" / "model.pth.tar-15"
+DEFAULT_CHECKPOINT = Path(__file__).resolve().parent.parent / "checkpoints" / "osnet_market1501" / "model" / "model.pth.tar-15"
 
 SEQUENCES = ["MOT17-02-FRCNN", "MOT17-04-FRCNN"]
 
@@ -60,12 +62,19 @@ def _run_tracker_on_sequence(seq_dir: Path, detector, extractor, variant_cfg) ->
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
+                         help="Re-ID checkpoint yolu (varsayilan: Faz 2'nin Market-1501 checkpoint'i)")
+    args = parser.parse_args()
+
     detector = YoloDetector(weights="yolov8n.pt", conf_threshold=0.35, classes=[0])  # 0 = person (COCO)
 
-    checkpoint_path = str(CHECKPOINT) if CHECKPOINT.is_file() else None
+    checkpoint_path = str(args.checkpoint) if args.checkpoint.is_file() else None
     if checkpoint_path is None:
-        print(f"[run_ablation] UYARI: egitilmis checkpoint bulunamadi ({CHECKPOINT}), "
+        print(f"[run_ablation] UYARI: egitilmis checkpoint bulunamadi ({args.checkpoint}), "
               f"ImageNet backbone kullanilacak -- ReID varyantlari zayif kalir.")
+    else:
+        print(f"[run_ablation] checkpoint: {checkpoint_path}")
     extractor = OSNetFeatureExtractor(model_name="osnet_x1_0", checkpoint_path=checkpoint_path)
 
     all_rows = []

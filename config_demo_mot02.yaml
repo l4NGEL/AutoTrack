@@ -28,7 +28,7 @@ tracker:
 reid:
   enabled: true
   model_name: osnet_x1_0
-  checkpoint_path: checkpoints/osnet_market1501/model/model.pth.tar-15
+  checkpoint_path: checkpoints/osnet_mot_finetuned/model.pth.tar  # Faz 2.3: MOT-domaininde fine-tune edilmis
   input_size: [256, 128]
 
 zones:

@@ -18,3 +18,5 @@ data/demo_*.mp4
 data/demo_*.png
 data/verify_*.png
 data/lifecycle_*.json
+data/mot17_reid_finetune/
+checkpoints/osnet_mot_finetuned/
