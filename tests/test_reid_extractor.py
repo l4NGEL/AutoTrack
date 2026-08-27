@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -41,3 +43,24 @@ def test_cosine_similarity_bounded():
 
 def test_cosine_similarity_handles_none():
     assert cosine_similarity(None, np.array([1.0])) == 0.0
+
+
+def test_trained_checkpoint_loads_when_present():
+    """checkpoints/osnet_market1501/ Faz 2 egitiminden sonra mevcutsa,
+    trusted-load duzeltmesinin (bkz. feature_extractor.py basi) hala
+    calistigini dogrula. Checkpoint yoksa (Faz 2 hic calistirilmadiysa)
+    atla -- bu testin var olmayan bir dosyaya bagimli olmasi yanlis olur."""
+    ckpt = (
+        Path(__file__).resolve().parent.parent
+        / "checkpoints" / "osnet_market1501" / "model" / "model.pth.tar-15"
+    )
+    if not ckpt.is_file():
+        pytest.skip("Faz 2 checkpoint'i henuz uretilmedi")
+
+    ext = OSNetFeatureExtractor(model_name="osnet_x1_0", checkpoint_path=str(ckpt))
+    assert ext.has_trained_weights is True
+
+    frame = (np.random.RandomState(2).rand(480, 640, 3) * 255).astype(np.uint8)
+    feats = ext.extract(frame, [(50, 50, 150, 300)])
+    assert feats.shape == (1, 512)
+    assert np.linalg.norm(feats[0]) == pytest.approx(1.0, abs=1e-4)

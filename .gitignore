@@ -7,3 +7,8 @@ data/output.mp4
 *.pt
 !yolov8n.pt
 .DS_Store
+
+# Faz 2: indirilen benchmark veri kumeleri (buyuk, git'e commit'lenmez)
+data/market1501/
+data/MOT17/
+checkpoints/

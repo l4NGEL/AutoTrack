@@ -10,10 +10,41 @@ from __future__ import annotations
 
 import warnings
 
+import os.path as osp
+
 import cv2
 import numpy as np
 import torch
 import torchreid
+from torchreid.reid.utils import torchtools as _torchtools
+
+
+def _load_checkpoint_trusted(fpath):
+    """torchreid.utils.load_checkpoint'in ayni davranisi, weights_only=False ile.
+
+    torch 2.6+ torch.load'da weights_only varsayilanini False->True yapti
+    (guvenlik icin, guvenilmeyen pickle'larda keyfi kod calismasini onler).
+    torchreid 0.2.5 buna guncellenmedi ve checkpoint'teki numpy dtype
+    nesneleri (rank1 degeri, torchreid'in kendi rank hesabindan) yuzunden
+    artik KENDI egittigimiz checkpoint'i bile acamiyor. numpy.dtype alt
+    siniflarini teker teker allowlist'e almak yerine (numpy 2.x'te
+    numpy.dtypes.Float32DType/Int64DType/... diye parcalanmis durumda,
+    hangisinin gerekecegi checkpoint'e gore degisir) weights_only=False
+    kullaniyoruz -- bu fonksiyon SADECE gelistiricinin config.yaml /
+    evaluation/*.py icinde acikca belirttigi yerel dosya yollarini yukler,
+    hicbir zaman bir URL'den veya kullanici yuklemesinden gelen dosya
+    degil, o yuzden bu ortamda guvenli.
+    """
+    if fpath is None:
+        raise ValueError("File path is None")
+    fpath = osp.abspath(osp.expanduser(fpath))
+    if not osp.exists(fpath):
+        raise FileNotFoundError(f'File is not found at "{fpath}"')
+    map_location = None if torch.cuda.is_available() else "cpu"
+    return torch.load(fpath, map_location=map_location, weights_only=False)
+
+
+_torchtools.load_checkpoint = _load_checkpoint_trusted
 
 
 class OSNetFeatureExtractor:

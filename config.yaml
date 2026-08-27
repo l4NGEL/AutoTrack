@@ -17,7 +17,12 @@ tracker:
 reid:
   enabled: true
   model_name: osnet_x1_0
-  checkpoint_path: null        # null ise ImageNet backbone (zayif embedding); egitilmis checkpoint icin dosya yolu verin
+  checkpoint_path: null        # null = ImageNet backbone (zayif embedding, ama repo klonlanir klonlanmaz calisir).
+                                # Faz 2'yi calistirdiysaniz (bkz. README "Testler"):
+                                # checkpoints/osnet_market1501/model/model.pth.tar-15
+                                # checkpoint'i gitignore'lu oldugu icin varsayilan olarak
+                                # buraya sabitlenmedi -- repo'yu klonlayan biri onu
+                                # kendisi uretmeden main.py'nin patlamamasi icin.
   input_size: [256, 128]
 
 zones:
