@@ -460,6 +460,48 @@ damgalarıyla tekrar tekrar isaret etmesi sayesinde bulunan, katmanli bir
 hata idi -- ilk fix (Faz 2.1) gercekti ve ise yaradi, ama tek basina yeterli
 degildi.
 
+## Faz 2.5 — gorunum galerisi (embedding gallery) (2026-08-27)
+
+Faz 2.4'teki ID7/ID46 tartismasi sirasinda (9 saniyelik bosluk -- gercek
+sonuc: recovery window'u zorla uzatmak yanlis olurdu, bkz. yukarida)
+kullanicinin onerdigi bir fikir degerlendirildi: tek bir EMA-harmanlanmis
+embedding yerine, her track'in son gorulen **belirgin sekilde farkli**
+gorunumlerinin kucuk bir galerisini (`embedding_gallery`, en fazla 10,
+`GALLERY_NOVELTY_THRESH=0.85`'in altinda benzeyen yeni gorunumler eklenir)
+tutmasi. Kurtarma sirasinda (`_try_revive`) hem EMA embedding'e hem
+galerideki HER gorunume karsi benzerlik hesaplanip en iyisi kullaniliyor --
+kisi kaybolmadan once yandan, geri donduğunde onden gorunuyorsa bile
+eslesme sansi artiyor. 5 yeni birim test (biri ozellikle: EMA tek basina
+basarisiz olurdu ama galerideki eski bir gorunum kurtariyor -- gercekten
+calistigini kanitlayan senaryo).
+
+**Metodolojik durustce not:** bu degisiklik Faz 2.4'un mesafe siniri
+sikilastirmasiyla AYNI ablation calistirmasinda test edildi -- ikisinin
+etkisini ayri ayri izole eden kontrollu bir kosum yapilmadi. Asagidaki
+sayilar "Faz 2.4+2.5 birlikte, Faz 2.3'e karsi" karsilastirmasidir:
+
+| Sekans | Metrik | Faz 2.3 | Faz 2.4+2.5 | A. IOU-only (guncel) |
+|---|---|---:|---:|---:|
+| MOT17-02 | MOTA | 24.0% | 23.3% | 21.5% |
+| MOT17-02 | IDF1 | 48.4% | **50.1%** | 41.6% |
+| MOT17-02 | ID Sw. | 7 | 10 | 10 |
+| MOT17-04 | MOTA | 28.9% | **29.4%** | 29.2% |
+| MOT17-04 | IDF1 | 43.0% | 44.5% | 44.8% |
+| MOT17-04 | ID Sw. | 20 | **13** | 23 |
+
+**Yorum:** MOT17-04'te net iyilesme -- artik MOTA ve ID-switch'te de
+baseline'i geciyor (once sadece IDF1'e yakindi), IDF1 de baseline'a
+neredeyse esit. MOT17-02'de karisik: IDF1 daha da iyilesti (+1.7 puan) ama
+MOTA hafif dustu (-0.7) ve ID-switch baseline'a esitlendi (once 7, simdi
+10 -- hala baseline'in (10) altinda degil ustunde de degil). **A_IOU_only
+baseline'inin KENDI sayilari da degisti** (Faz 2.3'te MOTA 22.0/IDF1 44.3/
+IDSw 9, simdi 21.5/41.6/10) -- cunku Faz 2.4'un mesafe siniri ReID
+kullanmayan varyantlari da etkiliyor (agirliklardan bagimsiz, TUM ciftlere
+uygulaniyor). Yani bu tablodaki degisim sadece galerinin etkisi degil,
+mesafe siniri + galeri birlikte. Net sonuc: yon genelde olumlu (ozellikle
+MOT17-04), ama "galeri X puan kazandirdi" diye kesin bir sayi veremeyiz --
+bunu izole etmek icin ayri bir kontrollu kosum gerekir.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -494,6 +536,11 @@ degildi.
       israrla isaret ettigi ayni bolgede (306px, sinirin hemen altinda) gercek
       bir yanlis-birlestirme bulundu ve gorsel olarak dogrulandi; taban sinir
       ~176px'e sikilastirildi + `missed`e gore ek daralma eklendi; bkz. "Faz 2.4"
+- [x] **Faz 2.5:** gorunum galerisi (embedding gallery) -- tek EMA embedding
+      yerine son 10 belirgin-farkli gorunum saklaniyor, kurtarmada en iyisi
+      kullaniliyor; MOT17-04'te net iyilesme, MOT17-02'de karisik (bkz. "Faz 2.5")
+- [ ] Faz 2.4 (mesafe siniri) ile Faz 2.5'i (galeri) izole eden kontrollu
+      bir ablation kosumu -- su an ikisi birlikte olculdu
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida

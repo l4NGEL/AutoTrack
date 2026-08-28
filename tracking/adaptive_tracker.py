@@ -36,6 +36,18 @@ ID verilmez, eski track_id geri canlandirilir. Bu, DeepSORT'un "silinen
 track'leri bir sure daha eslestirme adayi tutma" fikrinin basitlestirilmis
 hali -- 2026-08-27'de gercek bir demo videosunda gozlenen "kisi kayboluyor,
 birkac kare sonra yeni ID ile geri geliyor" sorununa dogrudan cevap.
+
+Gorunum galerisi (embedding gallery):
+Tek bir EMA-harmanlanmis embedding, kisi farkli acilardan (onden/yandan/
+arkadan) gorundugunde bu goruntuleri "ortalayip" hicbirini iyi temsil
+etmeyebilir. Bunun yerine her track, son gorulen BELIRGIN SEKILDE FARKLI
+gorunumlerin kucuk bir galerisini de tutar (`embedding_gallery`, en fazla
+`GALLERY_MAX_SIZE`; yeni bir gorunum sadece son galeri girdisinden
+`GALLERY_NOVELTY_THRESH`'in altinda benzerse eklenir -- ardisik neredeyse
+ozdes karelerle galeriyi doldurmamak icin). Kurtarma (`_try_revive`)
+sirasinda, hem EMA embedding'e hem galerideki HER gorunume karsi benzerlik
+hesaplanir, ikisinin en iyisi kullanilir -- kisi kaybolmadan once yandan,
+geri donduğunde onden gorunuyorsa bile eslesme sansi artar.
 """
 from __future__ import annotations
 
@@ -77,6 +89,10 @@ MAX_ASSOCIATION_DIST_RATIO = 0.08  # kare kosegenine oran, TEK kare icin (missed
                                     # gevsekti. 0.08, mevcut testlerdeki ~50px/kare hareketi hala kabul eder.
 MIN_MISSED_TRUST = 0.3  # missed track_buffer'a yaklastikca mesafe butcesi bu orana kadar daralir
 
+# Gorunum galerisi (embedding gallery) -- bkz. modul docstring'i
+GALLERY_MAX_SIZE = 10
+GALLERY_NOVELTY_THRESH = 0.85  # ham cosine -- bunun altinda benzerse "yeni gorunum" sayilir, galeriye eklenir
+
 
 class Confidence(Enum):
     STABLE = "stable"
@@ -101,6 +117,7 @@ class AdaptiveTrack:
     reid_conf: float = 0.0
     weights_used: tuple = DEFAULT_BASE_WEIGHTS
     last_confirmed_xyxy: tuple | None = None  # son GERCEK eslesmedeki konum -- xyxy'nin aksine Kalman ekstrapolasyonuyla surunmez
+    embedding_gallery: list = field(default_factory=list)  # belirgin farkli gorunumler, en fazla GALLERY_MAX_SIZE
 
     @property
     def center(self):
@@ -135,6 +152,20 @@ class LostTrack:
     last_xyxy: tuple
     cls_name: str
     age: int = 0  # kayip galeride kac karedir bekliyor
+    embedding_gallery: list = field(default_factory=list)  # AdaptiveTrack.embedding_gallery'den devralinir
+
+
+def _update_gallery(gallery: list, embedding) -> None:
+    """embedding, galerinin son girdisinden yeterince farkliysa (bkz.
+    GALLERY_NOVELTY_THRESH) ekler; kapasite asilirsa en eskisini atar.
+    Ham (EMA'siz) embedding ile cagrilmali -- galeri gercek gozlenen
+    gorunumleri tutar, harmanlanmis/yumusatilmis olani degil."""
+    if embedding is None:
+        return
+    if not gallery or cosine_similarity(gallery[-1], embedding) < GALLERY_NOVELTY_THRESH:
+        gallery.append(embedding)
+        if len(gallery) > GALLERY_MAX_SIZE:
+            gallery.pop(0)
 
 
 def compute_adaptive_weights(
@@ -343,6 +374,7 @@ class AdaptiveTracker:
                 track.embedding = m * track.embedding + (1 - m) * embedding
                 track.embedding = track.embedding / (np.linalg.norm(track.embedding) + 1e-8)
             track.reid_conf = max(0.0, (cosine_similarity(track.embedding, embedding) + 1.0) / 2.0)
+            _update_gallery(track.embedding_gallery, embedding)  # ham gorunum, EMA degil
 
     def _new_track(self, det, embedding) -> AdaptiveTrack:
         kalman = KalmanBoxTracker(det.xyxy)
@@ -360,6 +392,8 @@ class AdaptiveTracker:
             reid_conf=0.0,
             last_confirmed_xyxy=det.xyxy,
         )
+        if embedding is not None:
+            track.embedding_gallery.append(embedding)
         self._next_id += 1
         return track
 
@@ -383,6 +417,11 @@ class AdaptiveTracker:
             if float(np.hypot(dcx - lcx, dcy - lcy)) > max_dist:
                 continue  # cok uzak -- gorunum benzerligi tek basina yetmez
             sim = cosine_similarity(lt.embedding, embedding)  # ham [-1,1], (0,1]'e esitlenmemis
+            if lt.embedding_gallery:
+                # Kisi kaybolmadan once farkli bir aciyla goruldüyse (galeri),
+                # tek EMA embedding'den daha iyi eslesebilir -- en iyisini al.
+                gallery_sim = max(cosine_similarity(e, embedding) for e in lt.embedding_gallery)
+                sim = max(sim, gallery_sim)
             if sim > best_sim:
                 best_idx, best_sim = idx, sim
 
@@ -402,6 +441,8 @@ class AdaptiveTracker:
         m = self.embedding_momentum
         blended = m * lost.embedding + (1 - m) * embedding
         blended = blended / (np.linalg.norm(blended) + 1e-8)
+        gallery = list(lost.embedding_gallery)  # kayip oncesi gorunumler korunur
+        _update_gallery(gallery, embedding)
         return AdaptiveTrack(
             track_id=lost.track_id,
             xyxy=det.xyxy,
@@ -414,6 +455,7 @@ class AdaptiveTracker:
             motion_conf=1.0,
             reid_conf=max(0.0, (cosine_similarity(lost.embedding, embedding) + 1.0) / 2.0),
             last_confirmed_xyxy=det.xyxy,
+            embedding_gallery=gallery,
         )
 
     def _prune(self) -> None:
@@ -426,7 +468,13 @@ class AdaptiveTracker:
                 # t.xyxy burada zaten track_buffer kadar Kalman ekstrapolasyonuyla
                 # surunmus olabilir, kurtarma mesafe kontrolu icin guvenilmez.
                 ref_box = t.last_confirmed_xyxy or t.xyxy
-                newly_lost.append(LostTrack(track_id=t.track_id, embedding=t.embedding, last_xyxy=ref_box, cls_name=t.cls_name))
+                newly_lost.append(LostTrack(
+                    track_id=t.track_id,
+                    embedding=t.embedding,
+                    last_xyxy=ref_box,
+                    cls_name=t.cls_name,
+                    embedding_gallery=list(t.embedding_gallery),
+                ))
         self.tracks = still_active
 
         for lt in self.lost_gallery:

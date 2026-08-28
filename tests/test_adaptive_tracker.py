@@ -307,6 +307,74 @@ def test_fresh_track_keeps_full_distance_budget():
     assert tracks[0].track_id == 1  # missed=0 -> tam butce, eslesme kabul edildi
 
 
+# --- Gorunum galerisi (embedding gallery) --------------------------------
+
+def test_new_track_seeds_gallery_with_first_embedding():
+    tracker = AdaptiveTracker()
+    emb = np.zeros(8); emb[0] = 1.0
+    tracks = tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+    assert len(tracks[0].embedding_gallery) == 1
+
+
+def test_gallery_ignores_near_identical_repeated_appearance():
+    tracker = AdaptiveTracker()
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+    # Ayni (neredeyse ozdes) gorunum 5 kare boyunca tekrar etsin.
+    tracks = None
+    for _ in range(5):
+        tracks = tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+    assert len(tracks[0].embedding_gallery) == 1  # yeni/farkli gorunum yok, galeri buyumedi
+
+
+def test_gallery_grows_with_genuinely_different_appearances():
+    tracker = AdaptiveTracker()
+    views = [np.zeros(8) for _ in range(4)]
+    for i, v in enumerate(views):
+        v[i] = 1.0  # birbirinden tamamen farkli 4 "gorunum"
+
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: views[0]}))
+    tracks = None
+    for v in views[1:]:
+        tracks = tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: v}))
+    assert len(tracks[0].embedding_gallery) == 4
+
+
+def test_gallery_respects_max_size_with_fifo_eviction():
+    tracker = AdaptiveTracker()
+    n = 15  # GALLERY_MAX_SIZE (10)'dan fazla, hepsi birbirinden farkli
+    tracks = None
+    for i in range(n):
+        v = np.zeros(20); v[i] = 1.0
+        tracks = tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: v}))
+    assert len(tracks[0].embedding_gallery) == 10  # GALLERY_MAX_SIZE
+
+
+def test_revival_succeeds_via_gallery_even_when_current_embedding_differs():
+    """Kisi kaybolmadan once iki farkli aciyla (view_a, view_b) goruldu --
+    EMA embedding'i buyuk olcude view_b'ye kaymis olsun. Geri dondugunde
+    view_a'ya benziyorsa, TEK EMA ile eslesme basarisiz olurdu ama galeri
+    (view_a hala icinde) kurtarmayi mumkun kilmali."""
+    tracker = AdaptiveTracker(track_buffer=3, reid_recovery_thresh=0.9)
+    view_a = np.zeros(8); view_a[0] = 1.0
+    view_b = np.zeros(8); view_b[1] = 1.0
+
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: view_a}))
+    # EMA'yi agirlikli olarak view_b'ye kaydir (momentum=0.9 -> tek karede tam kaymaz,
+    # birkaç kez view_b vererek EMA'yi belirgin sekilde view_b tarafina cekelim).
+    for _ in range(8):
+        tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: view_b}))
+
+    _run_empty_frames(tracker, 4, _frame())  # missed=4 > track_buffer=3 -> kayip galeriye
+
+    # Geri donen kisi view_a'ya benziyor -- EMA (simdi buyuk olcude view_b) ile
+    # kotu eslesir, ama galerideki ilk gorunum (view_a) hala orada.
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: view_a})
+    )
+    assert tracks[0].track_id == 1  # galeri sayesinde kurtarildi
+
+
 def test_reid_recovery_can_be_disabled():
     tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
     emb = np.zeros(8); emb[0] = 1.0
