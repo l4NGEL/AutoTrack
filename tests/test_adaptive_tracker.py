@@ -269,6 +269,44 @@ def test_impossible_single_frame_jump_is_rejected_even_with_matching_appearance(
     assert old_track.missed == 1  # eski track'e YANLISLIKLA eslenmedi
 
 
+def test_long_coasting_track_gets_tighter_distance_budget():
+    """2026-08-27 (Faz 2.4): gercek bir demo videosunda, 28 kare boyunca
+    kaymis (missed=28, track_buffer=30) bir track, 306px otesindeki TAMAMEN
+    FARKLI bir kisiyle eslesti -- cunku sabit 330px siniri missed'den
+    bagimsizdi. Artik mesafe butcesi missed buyudukce daraliyor."""
+    tracker = AdaptiveTracker(track_buffer=30)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    # 28 kare boyunca hic tespit gelmesin -- track uzun sure coasting yapsin.
+    for _ in range(28):
+        tracker.update([], _frame())
+
+    # Ayni (kusursuz eslesen) gorunum, ama fresh-track siniri icinde olsa da
+    # (frame 800x480, MAX_ASSOCIATION_DIST_RATIO*diag=120px) uzak sayilacak
+    # bir mesafede -- missed=28/30 -> butce ~0.3'e daralmis olmali.
+    far_but_within_fresh_budget = _det((190, 100, 210, 140))  # merkeze ~90px
+    tracks = tracker.update(
+        [far_but_within_fresh_budget], _frame(), extractor=StubExtractor({200: emb})
+    )
+    ids = {t.track_id for t in tracks}
+    assert 2 in ids  # daralmis butce disinda kaldigi icin reddedildi, yeni ID acildi
+    old_track = next(t for t in tracks if t.track_id == 1)
+    assert old_track.missed > 0  # eski track'e YANLISLIKLA eslenmedi
+
+
+def test_fresh_track_keeps_full_distance_budget():
+    """missed=0 iken ayni mesafe kabul edilmeli -- Faz 2.4'un onceki
+    (Faz 2.2) davranisi bozmadigini dogrular."""
+    tracker = AdaptiveTracker()
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    nearby = _det((190, 100, 210, 140))  # merkeze ~90px, tam butce (120px) icinde
+    tracks = tracker.update([nearby], _frame(), extractor=StubExtractor({200: emb}))
+    assert tracks[0].track_id == 1  # missed=0 -> tam butce, eslesme kabul edildi
+
+
 def test_reid_recovery_can_be_disabled():
     tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
     emb = np.zeros(8); emb[0] = 1.0

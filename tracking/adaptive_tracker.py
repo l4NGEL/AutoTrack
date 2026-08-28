@@ -70,7 +70,12 @@ MAX_RECOVERY_DIST_RATIO = 0.2  # kare kosegenine oran -- bunun otesindeki "benze
 # yeterince yuksek gorunse bile boyle bir eslesme fiziksel olarak imkansizdir.
 # Bu, agirliklardan BAGIMSIZ bir on-eleme: mesafe asilirsa skor ne olursa
 # olsun eslesme reddedilir.
-MAX_ASSOCIATION_DIST_RATIO = 0.15  # kare kosegenine oran, TEK kare icin
+MAX_ASSOCIATION_DIST_RATIO = 0.08  # kare kosegenine oran, TEK kare icin (missed=0 track'te tam butce)
+                                    # (2026-08-27: 0.15 idi -- gercek videoda missed=0'dan missed=0'a,
+                                    # TEK karede 309px'lik bir ziplama bulundu; FAST_MOTION_NORM_THRESH=0.02
+                                    # zaten 44px/kare'yi "hizli" sayiyor, 0.15=330px bunun 7.5 kati kadar
+                                    # gevsekti. 0.08, mevcut testlerdeki ~50px/kare hareketi hala kabul eder.
+MIN_MISSED_TRUST = 0.3  # missed track_buffer'a yaklastikca mesafe butcesi bu orana kadar daralir
 
 
 class Confidence(Enum):
@@ -267,7 +272,6 @@ class AdaptiveTracker:
         return embeddings
 
     def _cost_matrix(self, dets, det_embeddings, predicted_boxes, frame_diag):
-        max_dist = MAX_ASSOCIATION_DIST_RATIO * frame_diag
         cost = np.ones((len(self.tracks), len(dets)))
         for i, t in enumerate(self.tracks):
             if self.weight_mode == "adaptive":
@@ -276,6 +280,14 @@ class AdaptiveTracker:
                 weights = self._masked_fixed_weights(t)
             alpha, beta, gamma = weights
             tcx, tcy = t.center
+            # Uzun sure eslesmemis (missed yuksek) bir track'in Kalman tahmini
+            # sadece duz-cizgi ekstrapolasyonudur -- ne kadar uzun surerse o
+            # kadar guvenilmezdir. Mesafe butcesini buna gore daraltiyoruz;
+            # sabit bir sinir (once 0.15*kosegen = ~330px), 28 kare boyunca
+            # kaymis bir tahminin 306px otesindeki BASKA bir kisiyle
+            # eslesmesine izin verdigi gercek bir vakada bulundu (bkz. Faz 2.4).
+            missed_trust = max(MIN_MISSED_TRUST, 1.0 - t.missed / max(self.track_buffer, 1))
+            max_dist = MAX_ASSOCIATION_DIST_RATIO * frame_diag * missed_trust
             for j, d in enumerate(dets):
                 dcx, dcy = (d.xyxy[0] + d.xyxy[2]) / 2, (d.xyxy[1] + d.xyxy[3]) / 2
                 if float(np.hypot(dcx - tcx, dcy - tcy)) > max_dist:

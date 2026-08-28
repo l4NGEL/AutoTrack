@@ -411,6 +411,55 @@ sekans (7'nin tumu, egitim/degerlendirme ayrimini koruyarak) ve gercek bir
 validation split ile tekrarlanmadan bu sonucu "kanitlanmis" saymayin --
 ama yon net: dogru yonde, ve MOT17-02'de gercek, olculebilir bir kazanc var.
 
+## Faz 2.4 — Faz 2.1'in mesafe sinirinin kendisi hala gevsekti (2026-08-27)
+
+Kullanicinin ayni gun ("direğin arkasından 1 saniye görünmezken yeni ID
+alıyor") ısrarla tekrarlanan gozlemi uzerine, verdigi kesin zaman damgalari
+(saniye 14 / saniye 24) ile videoda o araligi bulup **kare-kare, gorsel
+olarak** dogrulandi: **kare 450'de acik renkli kiyafetli bir kadin,
+kare 479'da (28 kare sonra) direk yanindaki koyu kiyafetli TAMAMEN FARKLI
+bir kisi -- ayni ID'yi paylasiyorlardi.** Merkez mesafesi 306px -- Faz 2.1'in
+`MAX_ASSOCIATION_DIST_RATIO=0.15` (kare kosegeninin ~330px'i) sinirinin
+hemen altinda, tam sinirda kacmis.
+
+**Kok neden -- iki kat:**
+1. Sinir, track'in ne kadar suredir eslesmedigini (`missed`) hic hesaba
+   katmiyordu. 28 kare boyunca (`track_buffer=30`'a cok yakin) sadece
+   Kalman ekstrapolasyonuyla surunmus bir tahmine hala TAM 330px butce
+   taniniyordu -- oysa bu kadar uzun sureli bir tahmine guven cok daha
+   dusuk olmali.
+2. Daha da temel bir sorun: taban sinirin kendisi (330px, missed=0 gibi
+   "taze" bir track icin bile) tek kare icin fazla gevsekti --
+   `FAST_MOTION_NORM_THRESH=0.02` (44px/kare) zaten "hizli hareket" sayiyor,
+   330px bunun **7.5 kati**. Ayri bir global tarama, missed=0'dan missed=0'a
+   TEK karede 309px'lik BASKA bir siçrama daha buldu (ID40, kare 478->479)
+   -- yani sorun sadece uzun-coasting durumunda degil, "taze" eslesmelerde
+   de vardi.
+
+**Fix (`tracking/adaptive_tracker.py`):**
+- `MAX_ASSOCIATION_DIST_RATIO` 0.15'ten **0.08**'e sikilastirildi (taban
+  butce, missed=0 icin).
+- `MIN_MISSED_TRUST=0.3`: butce artik `missed`e gore lineer daraliyor --
+  `missed=0` -> tam butce, `missed=track_buffer` -> butcenin sadece %30'u.
+- 2 yeni birim test.
+
+**Dogrulama:** tum videoda en buyuk 5 sicrama artik hepsi **uzun bosluklu**
+(30-71 kare, yani 1.5-3.5 saniye) ve mesafeleri o sureye gore fizikselcek
+makul (115-340px) -- kisa-bosluklu ani ziplama deseni tamamen kayboldu.
+Benzersiz track ID sayisi 43'ten **46**'ya cikti (yanlis birlestirmelerin
+duzelmesiyle tutarli -- daha once birlesen farkli kisiler artik doğru
+sekilde ayri ID'ler aliyor).
+
+Bu, ayni gun icinde ayni sinifin (mesafe siniri) **ikinci** sikilastirilmasi
+oldu (Faz 2.1: 685px'i durdurmak icin 330px sinir kondu; Faz 2.4'te o
+330px'in kendisi 306px'e bile izin verdigi anlasilinca taban butce
+~176px'e (0.08 orani) indirildi, missed'e gore daha da daralabiliyor).
+Durustce: bu, "bir kere düzelt, bitti" degil,
+kullanicinin ayni bolgeyi (direk civarindaki kisi) ısrarla farklı zaman
+damgalarıyla tekrar tekrar isaret etmesi sayesinde bulunan, katmanli bir
+hata idi -- ilk fix (Faz 2.1) gercekti ve ise yaradi, ama tek basina yeterli
+degildi.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -441,6 +490,10 @@ ama yon net: dogru yonde, ve MOT17-02'de gercek, olculebilir bir kazanc var.
       dokunmadan) — **MOT17-02'de Adaptive artik uc metrikte de baseline'i
       geciyor** (ilk kez); bkz. "Faz 2.3" bolumu icin sayilar ve durustce
       belirtilen sinirlamalar (62 kimlik, %100 train acc = overfitting riski)
+- [x] **Faz 2.4:** Faz 2.1'in mesafe siniri (330px) hala gevsekti -- kullanicinin
+      israrla isaret ettigi ayni bolgede (306px, sinirin hemen altinda) gercek
+      bir yanlis-birlestirme bulundu ve gorsel olarak dogrulandi; taban sinir
+      ~176px'e sikilastirildi + `missed`e gore ek daralma eklendi; bkz. "Faz 2.4"
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
@@ -457,8 +510,10 @@ python -m evaluation.make_demo_video    # MOT17-04 karelerini tek video yapar
 python main.py --config config_demo.yaml    # data/demo_output.mp4 uretir
 ```
 
-Ortalama 524 kare boyunca **43 farkli track ID** (Faz 2.1'deki kayip-kimlik
-kurtarma + mesafe siniri sonrasi -- oncesinde 55'ti), karede ortalama **16
+Ortalama 524 kare boyunca **46 farkli track ID** (Faz 2.1-2.4'teki kayip-kimlik
+kurtarma + mesafe siniri duzeltmeleri sonrasi -- oncesinde 55'ti; sayinin
+tekrar artmasi -- 42/43'ten 46'ya -- Faz 2.4'un yanlis-birlestirmeleri
+duzelttigiyle tutarli, bkz. "Faz 2.4"), karede ortalama **16
 kisi**, uctan uca (tespit+takip+ReID+HUD+video yazma dahil) tipik olarak
 ~9-11 FPS (RTX 2080; bu oturumda arka arkaya cok sayida GPU isi
 calistirildigi icin tek tek calistirmalar arasi FPS gozle gorulur sekilde
