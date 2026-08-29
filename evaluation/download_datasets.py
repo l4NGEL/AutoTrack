@@ -22,6 +22,10 @@ from huggingface_hub import hf_hub_download, snapshot_download
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 MOT17_EVAL_SEQUENCES = ["MOT17-02-FRCNN", "MOT17-04-FRCNN"]  # evaluation/run_ablation.py -- asla egitimde kullanilmaz
 MOT17_FINETUNE_SEQUENCES = ["MOT17-09-FRCNN", "MOT17-11-FRCNN"]  # evaluation/finetune_reid_mot.py -- asla degerlendirmede kullanilmaz
+# Faz 2.7: 7-sekans benchmark icin ek "temiz" (fine-tune'de HIC kullanilmayan) sekanslar.
+# MOT17'nin FRCNN varyantindaki 7 sekans: 02,04,05,09,10,11,13 -- bunlarin 09/11'i
+# yukarida egitimde kullanildi, o yuzden 7-sekans ablation'inda ayri isaretlenmeli.
+MOT17_EXTRA_EVAL_SEQUENCES = ["MOT17-05-FRCNN", "MOT17-10-FRCNN", "MOT17-13-FRCNN"]
 
 
 def download_market1501():
@@ -90,3 +94,4 @@ if __name__ == "__main__":
     download_market1501()
     download_mot17(MOT17_EVAL_SEQUENCES)
     download_mot17(MOT17_FINETUNE_SEQUENCES)
+    download_mot17(MOT17_EXTRA_EVAL_SEQUENCES)

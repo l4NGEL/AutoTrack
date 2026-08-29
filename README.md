@@ -535,6 +535,56 @@ teorik bir fikir degil, gercekten calisiyor" derken abartmamak gerektigini
 gosteriyor -- calisiyor ama etkisi kucuk ve sekansa bagli, bulunmasi zor
 degildi cunku dogru deneyi kurunca hemen ortaya cikti.
 
+## Faz 2.7 — 7 sekansta genisletilince Faz 2.4 aslinda NET NEGATIF cikti (2026-08-27)
+
+Kullanicinin onerisiyle, MOT17'nin FRCNN varyantindaki 7 sekansin TUMUNDE
+(02,04,05,09,10,11,13) ayni 3-kosullu (Baseline / sadece Faz 2.4 /
+Faz 2.4+2.5) ablation calistirildi (`evaluation/run_seven_sequence_ablation.py`).
+**09 ve 11, Re-ID checkpoint'inin fine-tune EGITIMINDE kullanildigi icin**
+(bkz. Faz 2.3) "kirli" sayilip aggregate'in disinda tutuldu; aggregate
+sadece 5 "temiz" (hic egitimde gorulmemis) sekans uzerinden hesaplandi.
+
+| Sekans (temiz) | Kosul | MOTA | IDF1 | ID Sw. |
+|---|---|---:|---:|---:|
+| MOT17-02 | Baseline / 2.4+2.5 | 24.0% / 23.3% | 48.4% / 50.1% | 7 / 10 |
+| MOT17-04 | Baseline / 2.4+2.5 | 28.9% / **29.4%** | 43.0% / 44.5% | 20 / **13** |
+| MOT17-05 | Baseline / 2.4+2.5 | **8.1%** / -10.6% | 37.3% / 31.7% | 50 / 66 |
+| MOT17-10 | Baseline / 2.4+2.5 | **26.5%** / 25.5% | 51.1% / 50.4% | 11 / 14 |
+| MOT17-13 | Baseline / 2.4+2.5 | **5.7%** / 4.6% | 38.0% / 38.6% | 23 / 22 |
+| **AGGREGATE (5 temiz)** | Baseline / 2.4+2.5 | **24.7%** / 23.3% | 44.0% / 44.7% | **111** / 125 |
+
+(Kalin: o satirdaki en iyi deger. Tam FP/FN dahil tum sayilar ve
+kirli/09-11 satirlari icin bkz. betigin ciktisi / git tarihi.)
+
+**Sonuc durustce: AGREGAT SEVIYEDE Faz 2.4 (mesafe siniri) MOTA'da (24.7%->23.3%)
+VE ID-switch'te (111->125) Baseline'dan KOTU.** Sadece IDF1 hafif iyilesiyor
+(44.0%->44.7%). MOT17-04, oncesinde Faz 2.4'un "net kazanc" oldugu tek
+kanit noktasiydi ve **temsili degilmis** -- 5 sekansin sadece 1'i acikca
+kazaniyor (04), 3'u aciyor (02'de ID-switch, 05'te COK KOTU, 10'da), 1'i
+karisik (13).
+
+**MOT17-05'teki cokus icin somut, dogrulanmis bir aciklama var:** bu sekans
+**640x480 cozunurlukte, 14 FPS'te** cekilmis -- kosegeni 800px (digerleri
+1920x1080'de 2203px). `MAX_ASSOCIATION_DIST_RATIO` kare KOSEGENININ bir
+orani (0.08) olarak tanimli, kare HIZINDAN (fps) bagimsiz. 14 FPS'te her
+kare 1/14s'yi temsil eder (30 FPS'in ~2.1 kati) -- yani ayni gercek yurume
+hizinda bir kisi, dusuk fps'te kare basina COK DAHA FAZLA piksel kat eder,
+ama sabit-oranli sinirim bunu hesaba katmiyor. Sonuc: MOT17-05'te GECERLI
+eslesmeler bile reddediliyor -- Faz 2.4/2.6'nin cozdugu sorunun (imkansiz
+ziplamalari kabul etmek) TAM TERSI bir hata modu. MOT17-13 (25 FPS, 1920x1080,
+resmi MOT17 aciklamalarina gore hareketli/otobus-monteli kamera -- bu
+ikinci kismi bu oturumda gorsel olarak dogrulamadim, sadece bilinen
+benchmark bilgisiyle) de hafif kotulesiyor, muhtemelen benzer ama daha
+hafif bir sebeple.
+
+**Anlami:** mesafe sinirini SADECE MOT17-04'te (statik kamera, 30fps,
+1080p) dogrulamak yeterli degilmis -- 0.08 orani o sekansa fazla ozel
+kalibre olmus olabilir. Gercek duzeltme muhtemelen kare HIZINA gore
+olceklenen bir butce (`piksel/saniye` cinsinden sabit bir tavan, `piksel/kare`
+degil) -- ama bu, bu oturumda UYGULANMADI, sadece TESHIS EDILDI. Su anki
+kod (Faz 2.4-2.6) MOT17-04 gibi 25-30fps/1080p sekanslarda iyi, dusuk-fps
+veya farkli cozunurluklu goruntude DIKKATLI kullanilmali.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -577,6 +627,13 @@ degildi cunku dogru deneyi kurunca hemen ortaya cikti.
       (Baseline'la birebir ayni), MOT17-04'te kucuk ama gercek katki**
       (ID-switch -1/-2); onceki iyilesmenin cogu Faz 2.4'ten geliyormus.
       Bkz. "Faz 2.6" icin tam 4-kosullu tablo
+- [x] **Faz 2.7:** 7 sekansta genisletildi -- **agregat seviyede Faz 2.4 aslinda
+      Baseline'dan KOTU cikti** (MOTA 24.7%->23.3%, ID-switch 111->125); tek
+      "kazanc" sekansi MOT17-04 temsili degilmis. Kok neden teshis edildi (dusuk
+      cozunurluk/fps'te -- MOT17-05, 640x480@14fps -- sabit-oranli mesafe siniri
+      GECERLI eslesmeleri reddediyor); duzeltme henuz UYGULANMADI. Bkz. "Faz 2.7"
+- [ ] Mesafe sinirini kare hizina (fps) gore olcekleyen bir duzeltme (Faz 2.7'de
+      teshis edildi ama uygulanmadi)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
