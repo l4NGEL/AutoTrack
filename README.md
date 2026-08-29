@@ -502,6 +502,39 @@ mesafe siniri + galeri birlikte. Net sonuc: yon genelde olumlu (ozellikle
 MOT17-04), ama "galeri X puan kazandirdi" diye kesin bir sayi veremeyiz --
 bunu izole etmek icin ayri bir kontrollu kosum gerekir.
 
+## Faz 2.6 — Faz 2.4 ile Faz 2.5'i izole eden kontrollu ablation (2026-08-27)
+
+Kullanicinin (ChatGPT'den aktardigi) onerisi uzerine `tracking/adaptive_tracker.py`'ye
+iki bagimsiz anahtar eklendi (`use_missed_trust`, `use_embedding_gallery`,
+ayrica `association_dist_ratio`), boylece Faz 2.4 (mesafe siniri) ve Faz 2.5
+(gorunum galerisi) 4 ayri kosulda tek tek olculebildi
+(`evaluation/run_isolation_ablation.py`, aynı fine-tune edilmis checkpoint,
+E_Adaptive agirliklariyla, MOT17-02/04):
+
+| Sekans | Kosul | MOTA | IDF1 | ID Sw. |
+|---|---|---:|---:|---:|
+| MOT17-02 | Baseline (ikisi de kapali) | 24.0% | 48.4% | 7 |
+| MOT17-02 | Sadece Faz 2.4 | 23.3% | 50.1% | 10 |
+| MOT17-02 | Sadece Faz 2.5 | **24.0%** | **48.4%** | **7** |
+| MOT17-02 | Faz 2.4+2.5 | 23.3% | 50.1% | 10 |
+| MOT17-04 | Baseline (ikisi de kapali) | 28.9% | 43.0% | 20 |
+| MOT17-04 | Sadece Faz 2.4 | 29.4% | 44.3% | 14 |
+| MOT17-04 | Sadece Faz 2.5 | 28.9% | 43.5% | 18 |
+| MOT17-04 | Faz 2.4+2.5 | 29.4% | 44.5% | 13 |
+
+**Net, artik kesin cevap: "Sadece Faz 2.5" satiri MOT17-02'de Baseline'la
+BIREBIR AYNI** (24.0/48.4/7 -- virgulüne kadar). Yani bu sekansta gorunum
+galerisinin olcume yansiyan HICBIR etkisi olmadi -- muhtemelen bu sekansta
+galerinin devreye girecegi turden (kaybolup farkli aciyla geri donen) bir
+kurtarma senaryosu hic yasanmadi. MOT17-04'te ise kucuk ama gercek bir etki
+var: Baseline->Sadece 2.5, ID-switch 20->18 (-2); 2.4-only->2.4+2.5,
+ID-switch 14->13 (-1). Yani onceki Faz 2.5 bolumundeki iyilesmenin BUYUK
+COGUNLUGU Faz 2.4'ten (mesafe siniri) geliyormus, galeri sadece MOT17-04'te
+kucuk bir ek katki sagliyor, MOT17-02'de olcumde hic gorunmuyor. Bu, "gallery
+teorik bir fikir degil, gercekten calisiyor" derken abartmamak gerektigini
+gosteriyor -- calisiyor ama etkisi kucuk ve sekansa bagli, bulunmasi zor
+degildi cunku dogru deneyi kurunca hemen ortaya cikti.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -539,8 +572,11 @@ bunu izole etmek icin ayri bir kontrollu kosum gerekir.
 - [x] **Faz 2.5:** gorunum galerisi (embedding gallery) -- tek EMA embedding
       yerine son 10 belirgin-farkli gorunum saklaniyor, kurtarmada en iyisi
       kullaniliyor; MOT17-04'te net iyilesme, MOT17-02'de karisik (bkz. "Faz 2.5")
-- [ ] Faz 2.4 (mesafe siniri) ile Faz 2.5'i (galeri) izole eden kontrollu
-      bir ablation kosumu -- su an ikisi birlikte olculdu
+- [x] **Faz 2.6:** Faz 2.4 (mesafe siniri) ile Faz 2.5'i (galeri) izole eden
+      kontrollu ablation -- **galeri MOT17-02'de olcumde hic gorunmuyor
+      (Baseline'la birebir ayni), MOT17-04'te kucuk ama gercek katki**
+      (ID-switch -1/-2); onceki iyilesmenin cogu Faz 2.4'ten geliyormus.
+      Bkz. "Faz 2.6" icin tam 4-kosullu tablo
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida

@@ -226,6 +226,9 @@ class AdaptiveTracker:
         reid_recovery_enabled: bool = True,
         reid_recovery_window: int = DEFAULT_REID_RECOVERY_WINDOW,
         reid_recovery_thresh: float = DEFAULT_REID_RECOVERY_THRESH,
+        association_dist_ratio: float = MAX_ASSOCIATION_DIST_RATIO,
+        use_missed_trust: bool = True,
+        use_embedding_gallery: bool = True,
     ):
         self.track_thresh = track_thresh
         self.match_thresh = match_thresh  # min birlesik skor (0-1); altinda eslesme reddedilir
@@ -236,6 +239,11 @@ class AdaptiveTracker:
         self.reid_recovery_enabled = reid_recovery_enabled
         self.reid_recovery_window = reid_recovery_window
         self.reid_recovery_thresh = reid_recovery_thresh
+        # Faz 2.4/2.5'i izole eden ablation icin (bkz. evaluation/run_isolation_ablation.py):
+        # varsayilanlar mevcut ("Faz 2.4+2.5 birlikte") davranisi korur.
+        self.association_dist_ratio = association_dist_ratio
+        self.use_missed_trust = use_missed_trust  # False -> Faz 2.4'un missed-bazli daralmasi kapanir (duz butce)
+        self.use_embedding_gallery = use_embedding_gallery  # False -> Faz 2.5'in galerisi kurtarmada kullanilmaz
 
         self.tracks: list[AdaptiveTrack] = []
         self.lost_gallery: list[LostTrack] = []
@@ -317,8 +325,11 @@ class AdaptiveTracker:
             # sabit bir sinir (once 0.15*kosegen = ~330px), 28 kare boyunca
             # kaymis bir tahminin 306px otesindeki BASKA bir kisiyle
             # eslesmesine izin verdigi gercek bir vakada bulundu (bkz. Faz 2.4).
-            missed_trust = max(MIN_MISSED_TRUST, 1.0 - t.missed / max(self.track_buffer, 1))
-            max_dist = MAX_ASSOCIATION_DIST_RATIO * frame_diag * missed_trust
+            if self.use_missed_trust:
+                missed_trust = max(MIN_MISSED_TRUST, 1.0 - t.missed / max(self.track_buffer, 1))
+            else:
+                missed_trust = 1.0  # Faz 2.4 oncesi davranis: missed'den bagimsiz duz butce
+            max_dist = self.association_dist_ratio * frame_diag * missed_trust
             for j, d in enumerate(dets):
                 dcx, dcy = (d.xyxy[0] + d.xyxy[2]) / 2, (d.xyxy[1] + d.xyxy[3]) / 2
                 if float(np.hypot(dcx - tcx, dcy - tcy)) > max_dist:
@@ -417,7 +428,7 @@ class AdaptiveTracker:
             if float(np.hypot(dcx - lcx, dcy - lcy)) > max_dist:
                 continue  # cok uzak -- gorunum benzerligi tek basina yetmez
             sim = cosine_similarity(lt.embedding, embedding)  # ham [-1,1], (0,1]'e esitlenmemis
-            if lt.embedding_gallery:
+            if self.use_embedding_gallery and lt.embedding_gallery:
                 # Kisi kaybolmadan once farkli bir aciyla goruldüyse (galeri),
                 # tek EMA embedding'den daha iyi eslesebilir -- en iyisini al.
                 gallery_sim = max(cosine_similarity(e, embedding) for e in lt.embedding_gallery)

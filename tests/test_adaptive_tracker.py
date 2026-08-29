@@ -375,6 +375,39 @@ def test_revival_succeeds_via_gallery_even_when_current_embedding_differs():
     assert tracks[0].track_id == 1  # galeri sayesinde kurtarildi
 
 
+def test_missed_trust_scaling_can_be_disabled_for_isolation_ablation():
+    """Faz 2.4/2.5'i izole eden ablation icin (evaluation/run_isolation_ablation.py):
+    use_missed_trust=False -> Faz 2.4 oncesi duz-butce davranisina doner."""
+    tracker = AdaptiveTracker(track_buffer=30, use_missed_trust=False)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+    for _ in range(28):
+        tracker.update([], _frame())
+
+    far_but_within_fresh_budget = _det((190, 100, 210, 140))  # merkeze ~90px, tam butce (120px) icinde
+    tracks = tracker.update(
+        [far_but_within_fresh_budget], _frame(), extractor=StubExtractor({200: emb})
+    )
+    assert tracks[0].track_id == 1  # daralma kapali -- missed=28 olsa da tam butce ile kabul edildi
+
+
+def test_embedding_gallery_can_be_disabled_for_isolation_ablation():
+    """use_embedding_gallery=False -> Faz 2.5 oncesi (sadece EMA) davranisina doner."""
+    tracker = AdaptiveTracker(track_buffer=3, reid_recovery_thresh=0.9, use_embedding_gallery=False)
+    view_a = np.zeros(8); view_a[0] = 1.0
+    view_b = np.zeros(8); view_b[1] = 1.0
+
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: view_a}))
+    for _ in range(8):
+        tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: view_b}))
+    _run_empty_frames(tracker, 4, _frame())
+
+    tracks = tracker.update(
+        [_det((102, 100, 122, 140))], _frame(), extractor=StubExtractor({112: view_a})
+    )
+    assert tracks[0].track_id == 2  # galeri kapali -- EMA (view_b'ye kaymis) tek basina yetmedi, yeni ID
+
+
 def test_reid_recovery_can_be_disabled():
     tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
     emb = np.zeros(8); emb[0] = 1.0
