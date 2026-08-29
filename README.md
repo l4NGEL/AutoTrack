@@ -585,6 +585,41 @@ degil) -- ama bu, bu oturumda UYGULANMADI, sadece TESHIS EDILDI. Su anki
 kod (Faz 2.4-2.6) MOT17-04 gibi 25-30fps/1080p sekanslarda iyi, dusuk-fps
 veya farkli cozunurluklu goruntude DIKKATLI kullanilmali.
 
+## Faz 2.8 — fps-farkinda mesafe butcesi: teshis dogrulandi (2026-08-27)
+
+Faz 2.7'de teshis edilen duzeltme uygulandi: `tracking/adaptive_tracker.py`'ye
+`fps` parametresi ve `REFERENCE_FPS=30.0` sabiti eklendi.
+`max_dist = association_dist_ratio * frame_diag * missed_trust * (REFERENCE_FPS / fps)`
+-- dusuk fps -> daha genis butce (kare basina daha fazla gercek zaman
+gectigi icin). `evaluation/mot_metrics.read_seq_fps()` her sekansin
+`seqinfo.ini`'sinden gercek kare hizini okur; `main.py` da artik canli
+kaynaktan (`cap.get(cv2.CAP_PROP_FPS)`) okuyor. 3 yeni test.
+
+Ayni 7 sekansta, D kosulu (Faz 2.4+2.5+fps-farkindalik) olarak yeniden
+olculdu:
+
+| Sekans (temiz) | A. Baseline | D. +fps-farkinda (Faz 2.8) |
+|---|---:|---:|
+| MOT17-02 MOTA | 24.0% | 23.3% |
+| MOT17-04 MOTA | 28.9% | **29.4%** |
+| MOT17-05 MOTA | 8.1% | **10.1%** (B/C'de -10.6%'ydi!) |
+| MOT17-10 MOTA | 26.5% | 25.5% |
+| MOT17-13 MOTA | 5.7% | 5.3% |
+| **AGGREGATE MOTA** | 24.7% | **24.8%** |
+| **AGGREGATE IDF1** | 44.0% | **45.0%** |
+| **AGGREGATE ID Sw.** | **111** | 123 |
+
+**Teshis dogrulandi: MOT17-05'teki felaket (-%10.6 MOTA) tamamen duzeldi --
+%10.1'e cikti, orijinal Baseline'dan (8.1%) bile iyi.** Agregatta artik
+MOTA'da Baseline'i (marjinal, 24.7->24.8) ve IDF1'de acikca (44.0->45.0)
+geciyor. **Ama ID-switch agregatta hala Baseline'in gerisinde** (111 vs 123)
+-- MOT17-05'in kendisinde ID-switch hala yuksek (50->65, MOTA duzelmesine
+ragmen), yani bu sekans butunuyle "cozulmus" degil, sadece en buyuk hata
+modu (gecerli eslesmeleri reddetme) giderildi. MOT17-02/10'da da ID-switch
+hala Baseline'in az ustunde. Ozet: fps-farkindaligi net, olculebilir bir
+iyilestirme (ozellikle MOT17-05'i kurtardigi icin) ama "artik her sekansta
+Baseline'i her metrikte geciyoruz" demek hala doğru olmaz.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -632,8 +667,12 @@ veya farkli cozunurluklu goruntude DIKKATLI kullanilmali.
       "kazanc" sekansi MOT17-04 temsili degilmis. Kok neden teshis edildi (dusuk
       cozunurluk/fps'te -- MOT17-05, 640x480@14fps -- sabit-oranli mesafe siniri
       GECERLI eslesmeleri reddediyor); duzeltme henuz UYGULANMADI. Bkz. "Faz 2.7"
-- [ ] Mesafe sinirini kare hizina (fps) gore olcekleyen bir duzeltme (Faz 2.7'de
-      teshis edildi ama uygulanmadi)
+- [x] **Faz 2.8:** mesafe sinirini kare hizina (fps) gore olcekleyen duzeltme
+      uygulandi -- **MOT17-05'teki -%10.6 MOTA felaketi %10.1'e duzeldi**,
+      agregat MOTA/IDF1'de artik Baseline'i geciyor (ID-switch hala hafif
+      geride). Bkz. "Faz 2.8"
+- [ ] MOT17-05'te ID-switch hala yuksek (50->65) -- fps-farkindaligi MOTA'yi
+      duzeltti ama bu sekansin kimlik-surekliligi sorunu ayrica arastirilmali
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida

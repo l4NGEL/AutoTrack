@@ -33,6 +33,22 @@ PEDESTRIAN_CLASS = 1
 MIN_VISIBILITY = 0.2
 
 
+def read_seq_fps(seq_dir, default: float = 30.0) -> float:
+    """seqinfo.ini'deki frameRate'i okur (Faz 2.7: AdaptiveTracker'in
+    fps-farkinda mesafe olceklemesi icin gercek kare hizi lazim -- bkz.
+    tracking/adaptive_tracker.py). Dosya/alan yoksa default'a duser."""
+    seqinfo = Path(seq_dir) / "seqinfo.ini"
+    if not seqinfo.is_file():
+        return default
+    for line in seqinfo.read_text(encoding="utf-8").splitlines():
+        if line.strip().lower().startswith("framerate"):
+            try:
+                return float(line.split("=", 1)[1].strip())
+            except (IndexError, ValueError):
+                return default
+    return default
+
+
 def load_mot_gt(gt_path) -> dict:
     """MOT formatli gt.txt okur -> {frame: [(obj_id, (x,y,w,h)), ...]}."""
     by_frame: dict = {}

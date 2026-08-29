@@ -89,6 +89,17 @@ MAX_ASSOCIATION_DIST_RATIO = 0.08  # kare kosegenine oran, TEK kare icin (missed
                                     # gevsekti. 0.08, mevcut testlerdeki ~50px/kare hareketi hala kabul eder.
 MIN_MISSED_TRUST = 0.3  # missed track_buffer'a yaklastikca mesafe butcesi bu orana kadar daralir
 
+# Faz 2.7: MAX_ASSOCIATION_DIST_RATIO, MOT17-04 (30 FPS, 1920x1080) uzerinde
+# kalibre edildi ve kare HIZINDAN bagimsizdi -- 7 sekansta genisletilince
+# MOT17-05'te (640x480, 14 FPS) MOTA -10.6%'ya cakildigi bulundu: dusuk
+# fps'te ayni gercek yurume hizi kare basina COK DAHA FAZLA piksel demek
+# (14 FPS'te her kare 30 FPS'in ~2.1 kati zamani temsil eder), ama sabit
+# oranli sinir bunu hesaba katmiyordu -- GECERLI eslesmeler reddediliyordu.
+# fps_scale, butceyi REFERENCE_FPS'e gore ters orantili olceklendirir:
+# dusuk fps -> daha genis butce, yuksek fps -> daha dar (mevcut davranisa
+# yakin kalir, cunku coğu sekans zaten ~25-30 FPS).
+REFERENCE_FPS = 30.0  # MAX_ASSOCIATION_DIST_RATIO bu fps icin kalibre edildi (MOT17-04)
+
 # Gorunum galerisi (embedding gallery) -- bkz. modul docstring'i
 GALLERY_MAX_SIZE = 10
 GALLERY_NOVELTY_THRESH = 0.85  # ham cosine -- bunun altinda benzerse "yeni gorunum" sayilir, galeriye eklenir
@@ -229,6 +240,8 @@ class AdaptiveTracker:
         association_dist_ratio: float = MAX_ASSOCIATION_DIST_RATIO,
         use_missed_trust: bool = True,
         use_embedding_gallery: bool = True,
+        fps: float = REFERENCE_FPS,
+        use_fps_scaling: bool = True,
     ):
         self.track_thresh = track_thresh
         self.match_thresh = match_thresh  # min birlesik skor (0-1); altinda eslesme reddedilir
@@ -239,6 +252,8 @@ class AdaptiveTracker:
         self.reid_recovery_enabled = reid_recovery_enabled
         self.reid_recovery_window = reid_recovery_window
         self.reid_recovery_thresh = reid_recovery_thresh
+        self.fps = fps  # bu kaynagin GERCEK kare hizi -- association_dist_ratio'yu olceklemek icin (Faz 2.7)
+        self.use_fps_scaling = use_fps_scaling  # False -> Faz 2.4-2.6 davranisi (fps'ten bagimsiz, eski)
         # Faz 2.4/2.5'i izole eden ablation icin (bkz. evaluation/run_isolation_ablation.py):
         # varsayilanlar mevcut ("Faz 2.4+2.5 birlikte") davranisi korur.
         self.association_dist_ratio = association_dist_ratio
@@ -329,7 +344,12 @@ class AdaptiveTracker:
                 missed_trust = max(MIN_MISSED_TRUST, 1.0 - t.missed / max(self.track_buffer, 1))
             else:
                 missed_trust = 1.0  # Faz 2.4 oncesi davranis: missed'den bagimsiz duz butce
-            max_dist = self.association_dist_ratio * frame_diag * missed_trust
+            if self.use_fps_scaling:
+                # Dusuk fps -> kare basina daha fazla gercek zaman -> daha genis butce (Faz 2.7).
+                fps_scale = REFERENCE_FPS / max(self.fps, 1.0)
+            else:
+                fps_scale = 1.0  # Faz 2.4-2.6 davranisi: fps'ten bagimsiz
+            max_dist = self.association_dist_ratio * frame_diag * missed_trust * fps_scale
             for j, d in enumerate(dets):
                 dcx, dcy = (d.xyxy[0] + d.xyxy[2]) / 2, (d.xyxy[1] + d.xyxy[3]) / 2
                 if float(np.hypot(dcx - tcx, dcy - tcy)) > max_dist:

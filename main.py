@@ -23,7 +23,7 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
-def _build_tracker(tracker_cfg: dict):
+def _build_tracker(tracker_cfg: dict, fps: float = 30.0):
     kind = tracker_cfg.get("type", "iou")
     if kind == "adaptive":
         a = tracker_cfg.get("adaptive", {})
@@ -37,6 +37,8 @@ def _build_tracker(tracker_cfg: dict):
             reid_recovery_enabled=a.get("reid_recovery_enabled", True),
             reid_recovery_window=a.get("reid_recovery_window", 60),
             reid_recovery_thresh=a.get("reid_recovery_thresh", 0.75),
+            fps=fps,
+            use_fps_scaling=a.get("use_fps_scaling", True),
         )
     else:
         tracker = ByteTracker(
@@ -78,7 +80,11 @@ def run(cfg: dict):
         conf_threshold=cfg["conf_threshold"],
         classes=cfg.get("classes"),
     )
-    tracker, tracker_kind = _build_tracker(cfg["tracker"])
+    # Webcam'ler genelde 0 veya guvenilmez bir deger raporlar -- 30'a duser.
+    source_fps = cap.get(cv2.CAP_PROP_FPS)
+    if not source_fps or source_fps <= 1:
+        source_fps = 30.0
+    tracker, tracker_kind = _build_tracker(cfg["tracker"], fps=source_fps)
 
     reid_extractor = None
     reid_cfg = cfg.get("reid", {})

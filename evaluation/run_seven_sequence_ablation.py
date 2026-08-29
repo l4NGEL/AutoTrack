@@ -22,7 +22,7 @@ from pathlib import Path
 import cv2
 
 from detection.yolo_detector import YoloDetector
-from evaluation.mot_metrics import evaluate_sequence, load_mot_gt, summarize, xyxy_to_xywh
+from evaluation.mot_metrics import evaluate_sequence, load_mot_gt, read_seq_fps, summarize, xyxy_to_xywh
 from reid.feature_extractor import OSNetFeatureExtractor
 from tracking.adaptive_tracker import AdaptiveTracker
 
@@ -34,14 +34,15 @@ TAINTED_SEQUENCES = ["MOT17-09-FRCNN", "MOT17-11-FRCNN"]  # Re-ID fine-tune'de g
 ALL_SEQUENCES = CLEAN_SEQUENCES + TAINTED_SEQUENCES
 
 CONDITIONS = {
-    "A_Baseline": dict(association_dist_ratio=0.15, use_missed_trust=False, use_embedding_gallery=False),
-    "B_Faz2.4_only": dict(association_dist_ratio=0.08, use_missed_trust=True, use_embedding_gallery=False),
-    "C_Faz2.4+2.5": dict(association_dist_ratio=0.08, use_missed_trust=True, use_embedding_gallery=True),
+    "A_Baseline": dict(association_dist_ratio=0.15, use_missed_trust=False, use_embedding_gallery=False, use_fps_scaling=False),
+    "B_Faz2.4_only": dict(association_dist_ratio=0.08, use_missed_trust=True, use_embedding_gallery=False, use_fps_scaling=False),
+    "C_Faz2.4+2.5": dict(association_dist_ratio=0.08, use_missed_trust=True, use_embedding_gallery=True, use_fps_scaling=False),
+    "D_Faz2.7_fps_aware": dict(association_dist_ratio=0.08, use_missed_trust=True, use_embedding_gallery=True, use_fps_scaling=True),
 }
 
 
-def _run_tracker_on_sequence(seq_dir: Path, detector, extractor, toggles) -> dict:
-    tracker = AdaptiveTracker(weight_mode="adaptive", base_weights=(0.4, 0.3, 0.3), **toggles)
+def _run_tracker_on_sequence(seq_dir: Path, detector, extractor, toggles, source_fps: float) -> dict:
+    tracker = AdaptiveTracker(weight_mode="adaptive", base_weights=(0.4, 0.3, 0.3), fps=source_fps, **toggles)
     img_paths = sorted((seq_dir / "img1").glob("*.jpg"))
     hyp_by_frame = {}
     t0 = time.perf_counter()
@@ -51,8 +52,8 @@ def _run_tracker_on_sequence(seq_dir: Path, detector, extractor, toggles) -> dic
         person_dets = [d for d in detections if d.cls_name == "person"]
         tracks = tracker.update(person_dets, frame, extractor=extractor)
         hyp_by_frame[i] = [(t.track_id, xyxy_to_xywh(t.xyxy)) for t in tracks]
-    fps = len(img_paths) / max(time.perf_counter() - t0, 1e-6)
-    return hyp_by_frame, fps
+    proc_fps = len(img_paths) / max(time.perf_counter() - t0, 1e-6)
+    return hyp_by_frame, proc_fps
 
 
 def main():
@@ -67,14 +68,15 @@ def main():
             print(f"[7seq] UYARI: {seq} indirilmemis, atlaniyor")
             continue
         gt_by_frame = load_mot_gt(seq_dir / "gt" / "gt.txt")
+        seq_fps = read_seq_fps(seq_dir)  # Faz 2.7: bu sekansin GERCEK kare hizi (seqinfo.ini)
         tag = "temiz" if seq in CLEAN_SEQUENCES else "KIRLI(fine-tune'de goruldu)"
-        print(f"\n=== {seq} [{tag}] ===")
+        print(f"\n=== {seq} [{tag}, {seq_fps:.0f} FPS kaynak] ===")
 
         accumulators = {}
         for name, toggles in CONDITIONS.items():
-            hyp_by_frame, fps = _run_tracker_on_sequence(seq_dir, detector, extractor, toggles)
+            hyp_by_frame, proc_fps = _run_tracker_on_sequence(seq_dir, detector, extractor, toggles, seq_fps)
             accumulators[name] = evaluate_sequence(gt_by_frame, hyp_by_frame)
-            print(f"  {name:16s} tamamlandi ({fps:.1f} FPS)")
+            print(f"  {name:16s} tamamlandi ({proc_fps:.1f} FPS islem hizi)")
 
         summary = summarize(accumulators)
         for name in CONDITIONS:

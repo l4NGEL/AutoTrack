@@ -1,10 +1,23 @@
 import pytest
 
-from evaluation.mot_metrics import evaluate_sequence, load_mot_gt, summarize, xyxy_to_xywh
+from evaluation.mot_metrics import evaluate_sequence, load_mot_gt, read_seq_fps, summarize, xyxy_to_xywh
 
 
 def test_xyxy_to_xywh_conversion():
     assert xyxy_to_xywh((10, 20, 30, 50)) == (10, 20, 20, 30)
+
+
+def test_read_seq_fps_parses_seqinfo(tmp_path):
+    (tmp_path / "seqinfo.ini").write_text(
+        "[Sequence]\nname=MOT17-05-FRCNN\nimDir=img1\nframeRate=14\nseqLength=418\n",
+        encoding="utf-8",
+    )
+    assert read_seq_fps(tmp_path) == 14.0
+
+
+def test_read_seq_fps_falls_back_to_default_when_missing(tmp_path):
+    assert read_seq_fps(tmp_path) == 30.0
+    assert read_seq_fps(tmp_path, default=25.0) == 25.0
 
 
 def test_load_mot_gt_filters_non_pedestrian_and_low_visibility(tmp_path):

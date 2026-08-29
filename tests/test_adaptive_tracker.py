@@ -408,6 +408,46 @@ def test_embedding_gallery_can_be_disabled_for_isolation_ablation():
     assert tracks[0].track_id == 2  # galeri kapali -- EMA (view_b'ye kaymis) tek basina yetmedi, yeni ID
 
 
+def test_low_fps_gets_wider_distance_budget():
+    """2026-08-27 (Faz 2.7): MOT17-05 (640x480 @ 14 FPS) 7-sekans testinde
+    MOTA -%10.6'ya cakildi -- dusuk fps'te ayni gercek yurume hizi kare
+    basina daha fazla piksel demek, ama sabit-oranli sinir bunu hesaba
+    katmiyordu. fps=14 iken, fps=30'da reddedilecek bir mesafe kabul
+    edilmeli."""
+    # frame 640x480 -> diag=800, ratio=0.08 -> 30fps'te tam butce=64px.
+    # ~100px, 30fps'te REDDEDILIR ama 14fps'te (butce ~137px) KABUL EDILMELI.
+    tracker = AdaptiveTracker(fps=14.0)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    farther_det = _det((196, 100, 216, 140))  # merkeze ~96px
+    tracks = tracker.update([farther_det], _frame(), extractor=StubExtractor({206: emb}))
+    assert tracks[0].track_id == 1  # dusuk fps -> genisletilmis butce ile kabul edildi
+
+
+def test_reference_fps_matches_old_behavior():
+    """fps=REFERENCE_FPS (varsayilan) iken fps_scale=1.0 -- ayni mesafe
+    fps=30'da reddedilmeli (Faz 2.4-2.6 ile ayni davranis)."""
+    tracker = AdaptiveTracker(fps=30.0)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    farther_det = _det((196, 100, 216, 140))  # merkeze ~96px > 64px butce
+    tracks = tracker.update([farther_det], _frame(), extractor=StubExtractor({206: emb}))
+    assert {t.track_id for t in tracks} == {1, 2}  # 30fps'te butce yeterince genis degil, yeni ID acildi
+
+
+def test_fps_scaling_can_be_disabled():
+    """use_fps_scaling=False -> Faz 2.4-2.6 (fps'ten bagimsiz) davranisina doner."""
+    tracker = AdaptiveTracker(fps=14.0, use_fps_scaling=False)
+    emb = np.zeros(8); emb[0] = 1.0
+    tracker.update([_det((100, 100, 120, 140))], _frame(), extractor=StubExtractor({110: emb}))
+
+    farther_det = _det((196, 100, 216, 140))
+    tracks = tracker.update([farther_det], _frame(), extractor=StubExtractor({206: emb}))
+    assert {t.track_id for t in tracks} == {1, 2}  # olcekleme kapali -- dusuk fps'e ragmen dar butce, reddedildi
+
+
 def test_reid_recovery_can_be_disabled():
     tracker = AdaptiveTracker(track_buffer=5, reid_recovery_enabled=False)
     emb = np.zeros(8); emb[0] = 1.0
