@@ -620,6 +620,70 @@ hala Baseline'in az ustunde. Ozet: fps-farkindaligi net, olculebilir bir
 iyilestirme (ozellikle MOT17-05'i kurtardigi icin) ama "artik her sekansta
 Baseline'i her metrikte geciyoruz" demek hala doğru olmaz.
 
+## Faz 2.9 — Occlusion Recovery Rate: olcum calisti, sonuc mutevazi (2026-08-27)
+
+Kullanicinin orijinal sorusuna dogrudan cevap arandi: **occlusion'dan sonra
+ayni kisi ayni tracker ID'siyle mi donuyor?** `evaluation/occlusion_recovery_rate.py`
+(Faz 2.7'de yazilmis, hic calistirilmamisti) fps-farkindaligina (Faz 2.8)
+guncellendi ve iki sekansta calistirildi. Yontem: bir GT kimlik >=5 kare
+boyunca kaybolursa (satir yok VEYA gorunurluk<0.2), hem oncesinde hem
+sonrasinda gercekten gorunurse, "occlusion event" sayilir; o an tracker'in
+hemen once/sonraki hipotez ID'si IoU>=0.5 ile bulunur; ikisi ayniysa
+"kurtarildi". 11 birim testle (`tests/test_occlusion_recovery_rate.py`)
+mantik senkron veriyle once dogrulandi.
+
+**Ilk calistirmada MOT17-04'te 28 event'in HICBIRINDE gecerli (once+sonra
+bulunabilen) eslesme yoktu -- kod hatasi mi diye ayrica arastirildi.**
+Genel kare-seviyesi eslesme orani (`frame_level_match_rate`, search_window'dan
+bagimsiz) %34.7 (7445/21451) cikti -- yani eslestirme mekanizmasi GENEL
+OLARAK calisiyor, event-sinir karelerinde ozellikle basarisiz. Ornek
+event'lerin sinir karelerini tek tek incelemek uc ayri gercek sebep gosterdi:
+bazen o karede hic hyp kutusu yok (best IoU=0 -- kismi gorunen kisi YOLO
+esigini (0.35) gecmiyor), bazen bir aday var ama esigin (0.5) altinda
+(0.12-0.27 arasi kismi ortusme), bazen esigi GECEN bir aday var (0.677) ama
+kalabalik sahnede AYNI karedeki BASKA bir GT kimlik o hyp kutusunu greedy
+eslestirmede daha yuksek skorla once kapiyor. Ucu de kod hatasi degil,
+kalabalik sokak sahnesinde occlusion'dan cikis anlarinin gercekten zor
+oldugunu gosteriyor.
+
+`search_window` (sinir karesinden kac kare geri/ileri aranacak) 5/15/30
+olarak ayri ayri denendi:
+
+| Sekans | Genel eslesme orani | search_window=5 | search_window=15 | search_window=30 |
+|---|---:|---:|---:|---:|
+| MOT17-04 (30fps, kalabalik) | %34.7 | 0/28 gecerli | 0/28 gecerli | 1/28 gecerli (ORR=100%, n=1) |
+| MOT17-05 (14fps, seyrek) | **%81.6** | 10/22 -> **ORR=%45.5** | 10/24 -> ORR=%41.7 | 10/25 -> ORR=%40.0 |
+
+**MOT17-04 icin ORR pratikte olculemedi** -- 28 occlusion event'inin
+neredeyse tamami "gecersiz" (esiz eslesme yok), search_window=30'da (1
+saniye) bile sadece 1 ornek var; bunu "%100 kurtarma" diye raporlamak
+yaniltici olur (n=1). Durustce: **bu sekansta olcum metodolojisinin kendisi
+kalabalik sahnede yeterince guvenilir bir before/after hipotezi bulamiyor**
+-- bu, ID-tutarliligindan once gelen, ayri bir sorun (tracker'in kendi
+ciktisi occlusion sinirinda birkac kare kararsiz).
+
+**MOT17-05'te olcum calisti ve anlamli bir ornek boyutu verdi (22-25 gecerli
+event).** ORR search_window=5'te %45.5, window genisledikce (15 -> %41.7,
+30 -> %40.0) hafifce DUSUYOR -- cunku genis pencerede bulunan EK gecerli
+event'ler kurtarilmis degil (kurtarilan sayisi hep 10'da sabit kaliyor,
+sadece payda buyuyor). Bu onemli: pencereyi genisletmek sonucu YUKARI degil
+asagi cekiyor, yani "daha iyi gorunsun diye pencereyi genislettik" itirazi
+gecersiz.
+
+**Faz 2.8'in MOTA sayilariyla birlikte okununca:** MOT17-05'te fps-fix
+sonrasi MOTA %8.1 -> %10.1'e cikti (bkz. "Faz 2.8"), ama ID-switch hala
+yuksek (50 -> 65) ve simdi olculen ORR de yalnizca **%40-46** -- yani bu
+sekansta gercek bir occlusion'dan sonra kisinin ayni ID'yi koruma sansi
+YARIDAN AZ. **Kullanicinin video'da gozlemledigi "direk arkasindan yeni
+ID'yle cikma" sikayeti, tek tek bulunup duzeltilen 2-3 hata disinda, hala
+sistemin GENEL bir zayifligi -- Faz 2.1/2.4/2.5/2.8 hepsi bunu iyilestirdi
+ama "cozuldu" demek durust olmaz.**
+
+Yol haritasindaki acik maddeler (MOT17-05'te hala yuksek ID-switch,
+agregat ID-switch'in Baseline'in gerisinde kalmasi) bu sonucla tutarli --
+ayni kok nedenin (kalabalik/occlusion sinirinda kirilgan eslesme) farkli
+metriklerdeki yansimalari.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -671,8 +735,14 @@ Baseline'i her metrikte geciyoruz" demek hala doğru olmaz.
       uygulandi -- **MOT17-05'teki -%10.6 MOTA felaketi %10.1'e duzeldi**,
       agregat MOTA/IDF1'de artik Baseline'i geciyor (ID-switch hala hafif
       geride). Bkz. "Faz 2.8"
+- [x] **Faz 2.9:** Occlusion Recovery Rate olculdu -- **MOT17-04'te (kalabalik)
+      olcum pratikte imkansiz cikti** (28 event'in ~tumu gecersiz, kok neden
+      arastirildi ve kod hatasi olmadigi dogrulandi), **MOT17-05'te (seyrek)
+      calisti: ORR %40-46** (search_window'a gore). Kullanicinin orijinal
+      "direk arkasi" sikayeti hala genel bir zayiflik, cozulmus degil. Bkz. "Faz 2.9"
 - [ ] MOT17-05'te ID-switch hala yuksek (50->65) -- fps-farkindaligi MOTA'yi
       duzeltti ama bu sekansin kimlik-surekliligi sorunu ayrica arastirilmali
+      (Faz 2.9'daki %40-46 ORR de ayni sorunu dogruluyor)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
