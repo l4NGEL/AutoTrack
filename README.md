@@ -880,45 +880,56 @@ de calistirildi -- "bu genel bir ORR sorunu mu, yoksa MOT17-04'e ozgu mu?"
 sorusunu bagimsiz bir sekansla test etmek icin. Once metrigi "sonuca gore"
 ayarlamak yanlis metodoloji olurdu.
 
-### Faz 3.1 replikasyonu — MOT17-05: TAMAMEN FARKLI bir dagilim
+### Faz 3.1 replikasyonu — 7 sekansin TUMU: E-orani kalabalikla GUCLU korele
 
-`python -m evaluation.occlusion_event_forensics --sequence MOT17-05-FRCNN`
-(kod, esikler, taksonomi MOT17-04'tekiyle BIREBIR AYNI):
+Once MOT17-05 (kod/esik/taksonomi MOT17-04'tekiyle BIREBIR AYNI), sonra
+kullanicinin istegiyle kalan 5 sekans da (02, 09, 10, 11, 13) ayni sekilde
+tarandi -- MOT17'nin FRCNN varyantindaki 7 sekansin TUMU artik forensics'ten
+gecti:
 
-| Metrik | MOT17-04 | MOT17-05 |
-|---|---:|---:|
-| Toplam event | 23 | 31 |
-| RECOVERED | 1 | 10 |
-| **E (belirsiz-gorunurluk sinir)** | **22 (%95.7)** | **2 (%6.5)** |
-| A (hic tespit yok) | 0 | 1 |
-| B (dusuk IoU) | 0 | 3 |
-| C (baska kimlige kapilmis) | 0 | 0 |
-| D (gercek ID-switch) | 0 | 15 |
-| E-etiketli taraflarin vis araligi | 0.20-0.23 | 0.20-0.24 |
-| Gecerli ORR event'i | 1/23 | 25/31 |
-| ORR | %100 (n=1, guvenilmez) | **%40.0** |
+| Sekans | Event | RECOVERED | E | A | B | C | D | Gecerli | ORR | E-orani | Ort. kalabalik |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| MOT17-02 | 54 | 9 | 32 | 2 | 9 | 0 | 2 | 11 | %81.8 | %59.3 | 13.5 |
+| MOT17-04 | 23 | 1 | 22 | 0 | 0 | 0 | 0 | 1 | %100 (n=1) | **%95.7** | **41.0** |
+| MOT17-05 | 31 | 10 | 2 | 1 | 3 | 0 | 15 | 25 | %40.0 | **%6.5** | **6.2** |
+| MOT17-09 | 13 | 7 | 2 | 0 | 1 | 0 | 3 | 10 | %70.0 | %15.4 | 7.2 |
+| MOT17-10 | 29 | 2 | 18 | 0 | 3 | 1 | 5 | 7 | %28.6 | %62.1 | 15.0 |
+| MOT17-11 | 19 | 5 | 5 | 0 | 1 | 0 | 8 | 13 | %38.5 | %26.3 | 6.1 |
+| MOT17-13 | 12 | 3 | 5 | 0 | 0 | 1 | 3 | 6 | %50.0 | %41.7 | 15.7 |
 
-**Bu, kullanicinin tam olarak sordugu soruyu cevapliyor: sinir-belirsizligi
-sorunu GENEL bir ORR problemi DEGIL, MOT17-04'e (yogun kalabalik sahne)
-OZGU.** MOT17-05'te E oranı sadece %6.5 -- MOT17-04'teki %95.7'nin tam
-tersi. Baskin kategori burada **D (gercek ID-switch, 15/31 = %48.4)** --
-yani MOT17-05'te ORR gercekten olcmeye calistigi seyi olcuyor: bircok
-event'te detection/eslesme sorunsuz calisiyor (hem once hem sonra tarafta
-gecerli hyp bulunuyor), sadece ID FARKLI. Bu, Faz 2.9'da olculen **%40.0
-ORR'un GUVENILIR, sinir-tanimi artefaktindan ETKILENMEMIS bir sayı oldugunu
-dogruluyor** -- rastlantisal "sansli sinir-karesi secimi" degil.
+(E-etiketli taraflarin gorunurluk araligi TUM 7 sekansta da 0.20-0.29
+civarinda -- kok neden hepsinde ayni, sadece SIKLIGI degisiyor. "Ort.
+kalabalik" = event'lerin once/sonra sinir karelerinde, ayni anda gorunur
+BASKA GT kimlik sayisinin ortalamasi, `crowd_before`/`crowd_after`'dan.)
 
-**Anlami:** ORR metriginin kendisi TANIM olarak bozuk degil -- MOT17-04
-gibi asiri yogun sahnelerde (genel eslesme orani %34.7, bkz. Faz 3.0)
-gorunurluk degerleri esik civarinda o kadar sik/kaotik dalgalaniyor ki
-"sinir karesi" secimi neredeyse hep belirsiz bir ana denk geliyor; MOT17-05
-gibi normal-yogunluklu sahnelerde bu sorun byuk olcude ortadan kalkiyor.
-**Bu yuzden Faz 3.2 (sinir tanimini vis>=0.5'e gore degistirmek) GENEL bir
-duzeltme olarak artik oncelikli degil** -- sadece asiri-yogun sahnelerde
-faydali olurdu, MOT17-05 gibi sekanslarda zaten sorun yok. Kullanicinin
-onceden belirttigi risk ("sonuc vermedi -> esigi degistir -> duzeldi gibi
-gorunur") boylece bagimsiz bir replikasyonla ELENDI -- metrik degistirilmeden
-once, HANGI kosullarda anlamli oldugu once anlasilmis oldu.
+**Bu bir varsayim degil, olculmus bir korelasyon: E-orani ile ortalama
+kalabalik arasinda Pearson r = 0.892 (n=7).** En dusuk-kalabalik 3 sekans
+(05, 11, 09 -- ortalama 6.1-7.2 kisi) hepsi dusuk E-orani (%6.5-%26.3); en
+yuksek-kalabalik sekans (04 -- 41.0, digerlerinin ~3 kati) acik ara en
+yuksek E-orani (%95.7). Orta-kalabalik sekanslar (02, 10, 13 -- 13.5-15.7)
+orta-yuksek E-orani (%41.7-%62.1) gosteriyor. Mukemmel monoton degil
+(09 vs 11 sirasi ufak bir istisna) ama n=7 icin cok guclu ve tutarli bir
+sinyal.
+
+**Sonuc: sinir-belirsizligi sorunu GENEL bir ORR problemi DEGIL, sahne
+YOGUNLUGUYLE olculebilir sekilde korele.** MOT17-04, 7 sekans arasinda
+kalabalik acisindan gercek bir DIS DEGER (outlier) -- digerlerinin en az
+2.6 kati. ORR degerleri de guvenilirlik acisindan boylece siralanabilir:
+**05, 09, 11 (E<%30, gecerli ornek 10-25) en guvenilir**; 02, 13 (E
+%42-%59, gecerli ornek 6-11) orta guvenilir; **10 (E %62, gecerli sadece
+7) ve ozellikle 04 (E %96, gecerli sadece 1) neredeyse olcum-disi.**
+
+**Anlami:** ORR metriginin TANIMI genel olarak bozuk degil -- yogunluk
+arttikca gorunurluk esik civarinda o kadar sik/kaotik dalgalaniyor ki
+"sinir karesi" secimi giderek daha sik belirsiz bir ana denk geliyor,
+olcumu SISTEMATIK olarak (rastgele degil) bozuyor. **Faz 3.2 (sinir
+tanimini vis>=0.5'e gore degistirmek) bu yuzden GENEL bir duzeltme olarak
+hala oncelikli degil** -- 5 sekansta (05,09,10,11,13) zaten calisiyor,
+sadece asiri-yogun (04) ve yuksek-yogun (02'ye yakin 10) sekanslarda
+faydali olurdu. Kullanicinin onceden belirttigi risk ("sonuc vermedi ->
+esigi degistir -> duzeldi gibi gorunur") boylece 6 bagimsiz replikasyonla
+(sadece 1 degil) ELENDI -- metrik degistirilmeden once, HANGI kosullarda
+anlamli oldugu once, sayisal olarak anlasilmis oldu.
 
 ## Yol haritasi
 
@@ -1003,15 +1014,16 @@ once, HANGI kosullarda anlamli oldugu once anlasilmis oldu.
       neden hicbir sey degistirmedigini tam olarak aciklıyor. Yazarken
       script'in kendi siniflandirma mantiginda gercek bir hata bulunup
       duzeltildi (bkz. "Faz 3.1").
-- [x] **Faz 3.1 replikasyonu (MOT17-05):** ayni kod/esik/taksonomi, BASKA
-      hicbir sey degistirilmeden, MOT17-05'te calistirildi -- **TAMAMEN
-      FARKLI dagilim cikti: E sadece %6.5 (2/31, MOT17-04'te %95.7),
-      baskin kategori D=gercek ID-switch (15/31).** Sinir-belirsizligi
-      sorunu GENEL bir ORR problemi degil, MOT17-04'e (asiri yogun sahne)
-      OZGUYMUS -- MOT17-05'teki %40.0 ORR guvenilir, artefakttan
-      etkilenmemis. Faz 3.2 (esik yeniden tanimi) bu yuzden artik oncelikli
-      DEGIL -- once metrigin ne zaman anlamli oldugu anlasildi, sonra
-      degistirilmedi. Bkz. "Faz 3.1 replikasyonu" bolumu
+- [x] **Faz 3.1 replikasyonu (7 sekansin TUMU):** ayni kod/esik/taksonomi,
+      BASKA hicbir sey degistirilmeden, kalan 6 sekansta (02,05,09,10,11,13)
+      da calistirildi. **E-orani ile ortalama kalabalik arasinda OLCULMUS
+      Pearson r=0.892 (n=7)** -- sinir-belirsizligi sorunu GENEL bir ORR
+      problemi degil, sahne yogunluguyla korele, MOT17-04 (kalabalik 41.0,
+      digerlerinin ~3 kati) gercek bir dis deger. ORR guvenilirlik sirasi:
+      05/09/11 en guvenilir (E<%30), 02/13 orta, 10/04 neredeyse olcum-disi
+      (E>%60). Faz 3.2 (esik yeniden tanimi) 6/7 replikasyonla artik
+      oncelikli DEGIL -- once metrigin ne zaman anlamli oldugu sayisal
+      olarak anlasildi, sonra degistirilmedi. Bkz. "Faz 3.1 replikasyonu"
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
