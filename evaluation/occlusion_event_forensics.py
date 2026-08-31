@@ -46,19 +46,24 @@ from evaluation.occlusion_recovery_rate import (
     _load_gt_all_visibility,
     _match_gt_to_hyp,
     compute_orr,
+    summarize_events,
 )
 from reid.feature_extractor import OSNetFeatureExtractor
 from tracking.adaptive_tracker import AdaptiveTracker
 from tracking.bytetrack_wrapper import iou as iou_xyxy
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "MOT17"
-CACHE_PATH = Path(__file__).resolve().parent / "_cache" / "occlusion_event_forensics_raw.json"
-SEQUENCE = "MOT17-04-FRCNN"
+CACHE_DIR = Path(__file__).resolve().parent / "_cache"
+DEFAULT_SEQUENCE = "MOT17-04-FRCNN"
 # Faz 2.9/2.10'un OLCTUGU ayni "resmi" baseline -- YOLO conf=0.35, tracker
 # track_thresh VARSAYILANI (Faz 3.0'in bulgusuyla efektif 0.5). Bu forensics
-# o spesifik 23 event'i aciklamali, Faz 3.0'in track_thresh=0.0 varyantini
+# o spesifik event'leri aciklamali, Faz 3.0'in track_thresh=0.0 varyantini
 # DEGIL (kasitli -- "hangi event'ler neden olculemedi" sorusu SIRASIYLA bu
 # baseline'a gore soruldu).
+# Faz 3.1'in MOT17-05 replikasyonu (kullanicinin istegi): asagidaki
+# TUM parametreler ve siniflandirma mantigi MOT17-04'te kullanilanla
+# BIREBIR AYNI -- "sonuca gore esik ayarlama" riskinden kacinmak icin
+# bilerek DEGISTIRILMEDI. Tek degisen sey --sequence.
 BASELINE_CONF = 0.35
 LOW_CONF = 0.15  # "hic tespit yok mu" sorusu icin en comert esik (Faz 3.0'la tutarli)
 MIN_OCCLUSION_FRAMES = 5
@@ -219,27 +224,31 @@ def _classify_raw_rows(raw_rows: list) -> list:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--sequence", default=DEFAULT_SEQUENCE,
+                         help="Faz 3.1'in MOT17-04'te kullandigi TUM parametreler/siniflandirma mantigi "
+                              "degistirilmeden, sadece hangi sekansta calistirilacagi (Faz 3.1 replikasyonu)")
     parser.add_argument("--from-cache", action="store_true",
-                         help="Pahali detection/tracking pass'ini atla, onceki calistirmadan kaydedilen ham "
-                              "olculeri kullan (SADECE siniflandirma mantigini test/duzelt icin)")
+                         help="Pahali detection/tracking pass'ini atla, bu sekans icin onceki calistirmadan "
+                              "kaydedilen ham olculeri kullan (SADECE siniflandirma mantigini test/duzelt icin)")
     args = parser.parse_args()
+    cache_path = CACHE_DIR / f"occlusion_event_forensics_raw_{args.sequence}.json"
 
     if args.from_cache:
-        if not CACHE_PATH.is_file():
-            raise SystemExit(f"Cache bulunamadi: {CACHE_PATH} -- once --from-cache OLMADAN calistirin")
-        print(f"=== Cache'ten yukleniyor: {CACHE_PATH} (detection/tracking ATLANDI) ===")
-        raw_rows = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        if not cache_path.is_file():
+            raise SystemExit(f"Cache bulunamadi: {cache_path} -- once --from-cache OLMADAN calistirin")
+        print(f"=== Cache'ten yukleniyor: {cache_path} (detection/tracking ATLANDI) ===")
+        raw_rows = json.loads(cache_path.read_text(encoding="utf-8"))
     else:
-        seq_dir = DATA_DIR / SEQUENCE
+        seq_dir = DATA_DIR / args.sequence
         gt_by_frame_full = _load_gt_all_visibility(seq_dir / "gt" / "gt.txt")
         seq_fps = read_seq_fps(seq_dir)
 
-        print(f"=== {SEQUENCE} -- Faz 2.9/2.10 baseline hyp uretiliyor (conf={BASELINE_CONF}, track_thresh varsayilan) ===")
+        print(f"=== {args.sequence} -- Faz 2.9/2.10 baseline hyp uretiliyor (conf={BASELINE_CONF}, track_thresh varsayilan) ===")
         hyp_by_frame_xyxy = _collect_baseline_hyp(seq_dir, seq_fps)
 
         events = compute_orr(gt_by_frame_full, hyp_by_frame_xyxy, MIN_OCCLUSION_FRAMES, MAX_RECOVERY_GAP, SEARCH_WINDOW)
         within = [e for e in events if e["within_window"]]
-        print(f"  {len(within)} pencere-ici event bulundu (beklenen: 23)")
+        print(f"  {len(within)} pencere-ici event bulundu")
 
         frames_needed = set()
         for e in within:
@@ -250,9 +259,9 @@ def main():
 
         raw_rows = _collect_raw_features(within, gt_by_frame_full, hyp_by_frame_xyxy, boundary_dets)
 
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(raw_rows, indent=2), encoding="utf-8")
-        print(f"  Ham olculer cache'e yazildi: {CACHE_PATH} (siniflandirmayi degistirip --from-cache ile tekrar deneyin)")
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(raw_rows, indent=2), encoding="utf-8")
+        print(f"  Ham olculer cache'e yazildi: {cache_path} (siniflandirmayi degistirip --from-cache ile tekrar deneyin)")
 
     rows = _classify_raw_rows(raw_rows)
 
@@ -268,12 +277,19 @@ def main():
               f"{str(r['reason_before']):>3s}/{str(r['reason_after']):<3s}      "
               f"{r['label']:>10s}")
 
-    print("\n=== Dagilim (event etiketi) ===")
+    print(f"\n=== Dagilim ({args.sequence}, event etiketi) ===")
     from collections import Counter
     counts = Counter(r["label"] for r in rows)
     for label in ("E", "A", "B", "C", "D", "RECOVERED", "UNKNOWN"):
         if counts.get(label):
             print(f"  {label:10s} {counts[label]}")
+
+    vis_values = [r["vis_before"] for r in rows if r["label"] == "E"] + [r["vis_after"] for r in rows if r["label"] == "E"]
+    if vis_values:
+        print(f"  E etiketli taraflarin gorunurluk araligi: {min(vis_values):.2f}-{max(vis_values):.2f}")
+
+    print(f"\n=== ORR ozeti ({args.sequence}, search_window={SEARCH_WINDOW}, ayni pencere-ici event'ler) ===")
+    summarize_events(raw_rows, args.sequence)
 
     return rows
 
