@@ -873,17 +873,52 @@ performansi degil, HANGI KARENIN referans alindigi. **Association algoritmasi
 (Faz 2.10) degil, detection recall (Faz 3.0) degil -- kok neden ORR
 metriginin sinir-karesi TANIMI.**
 
-**Sonraki adim (Faz 3.2, henuz uygulanmadi):** sinir karesini "esigi
-gecen ilk/son kare" yerine "esigi GUVENLE gecen ilk/son kare" olarak
-yeniden tanimlamak -- ornegin vis>=0.5 sartiyla, gerekirse occlusion
-gap'inin disina birkac kare daha genisleterek arama yapmak. Bu, ORR'un
-olcmeye calistigi asil soruyu ("kişi GERCEKTEN gorunur hale geldiginde
-ayni ID'yi mi koruyor") degistirmiyor, sadece "ne zaman gercekten gorunur
-sayilir" tanimini saglamlastiriyor. **Bu bulgu MOT17-05'te (Faz 2.9'da
-gercek %40-46 ORR olculebilen sekans) DOGRULANMADI** -- orada ayni
-forensics'i calistirmak, oradaki ORR sayisinin da ayni sinir-tanimi
-sorunundan mi etkilendigini yoksa gercekten farkli bir rejimde mi oldugunu
-gosterecek.
+**Sonraki adim (bu bolumun devaminda):** metriğin TANIMINI degistirmeden
+once, kullanicinin onerisiyle, ayni script AYNI parametrelerle (VIS_MARGIN_
+THRESH, arama penceresi, taksonomi -- HICBIRI degistirilmeden) MOT17-05'te
+de calistirildi -- "bu genel bir ORR sorunu mu, yoksa MOT17-04'e ozgu mu?"
+sorusunu bagimsiz bir sekansla test etmek icin. Once metrigi "sonuca gore"
+ayarlamak yanlis metodoloji olurdu.
+
+### Faz 3.1 replikasyonu — MOT17-05: TAMAMEN FARKLI bir dagilim
+
+`python -m evaluation.occlusion_event_forensics --sequence MOT17-05-FRCNN`
+(kod, esikler, taksonomi MOT17-04'tekiyle BIREBIR AYNI):
+
+| Metrik | MOT17-04 | MOT17-05 |
+|---|---:|---:|
+| Toplam event | 23 | 31 |
+| RECOVERED | 1 | 10 |
+| **E (belirsiz-gorunurluk sinir)** | **22 (%95.7)** | **2 (%6.5)** |
+| A (hic tespit yok) | 0 | 1 |
+| B (dusuk IoU) | 0 | 3 |
+| C (baska kimlige kapilmis) | 0 | 0 |
+| D (gercek ID-switch) | 0 | 15 |
+| E-etiketli taraflarin vis araligi | 0.20-0.23 | 0.20-0.24 |
+| Gecerli ORR event'i | 1/23 | 25/31 |
+| ORR | %100 (n=1, guvenilmez) | **%40.0** |
+
+**Bu, kullanicinin tam olarak sordugu soruyu cevapliyor: sinir-belirsizligi
+sorunu GENEL bir ORR problemi DEGIL, MOT17-04'e (yogun kalabalik sahne)
+OZGU.** MOT17-05'te E oranı sadece %6.5 -- MOT17-04'teki %95.7'nin tam
+tersi. Baskin kategori burada **D (gercek ID-switch, 15/31 = %48.4)** --
+yani MOT17-05'te ORR gercekten olcmeye calistigi seyi olcuyor: bircok
+event'te detection/eslesme sorunsuz calisiyor (hem once hem sonra tarafta
+gecerli hyp bulunuyor), sadece ID FARKLI. Bu, Faz 2.9'da olculen **%40.0
+ORR'un GUVENILIR, sinir-tanimi artefaktindan ETKILENMEMIS bir sayı oldugunu
+dogruluyor** -- rastlantisal "sansli sinir-karesi secimi" degil.
+
+**Anlami:** ORR metriginin kendisi TANIM olarak bozuk degil -- MOT17-04
+gibi asiri yogun sahnelerde (genel eslesme orani %34.7, bkz. Faz 3.0)
+gorunurluk degerleri esik civarinda o kadar sik/kaotik dalgalaniyor ki
+"sinir karesi" secimi neredeyse hep belirsiz bir ana denk geliyor; MOT17-05
+gibi normal-yogunluklu sahnelerde bu sorun byuk olcude ortadan kalkiyor.
+**Bu yuzden Faz 3.2 (sinir tanimini vis>=0.5'e gore degistirmek) GENEL bir
+duzeltme olarak artik oncelikli degil** -- sadece asiri-yogun sahnelerde
+faydali olurdu, MOT17-05 gibi sekanslarda zaten sorun yok. Kullanicinin
+onceden belirttigi risk ("sonuc vermedi -> esigi degistir -> duzeldi gibi
+gorunur") boylece bagimsiz bir replikasyonla ELENDI -- metrik degistirilmeden
+once, HANGI kosullarda anlamli oldugu once anlasilmis oldu.
 
 ## Yol haritasi
 
@@ -967,11 +1002,16 @@ gosterecek.
       gecen ilk/son kare, esigin hemen yaninda olmak ZORUNDA). Faz 3.0'in
       neden hicbir sey degistirmedigini tam olarak aciklıyor. Yazarken
       script'in kendi siniflandirma mantiginda gercek bir hata bulunup
-      duzeltildi (bkz. "Faz 3.1"). MOT17-05'te dogrulanmadi -- acik madde.
-- [ ] Faz 3.2 adayi (henuz uygulanmadi): ORR sinir-karesi tanimini
-      "esigi guvenle gecen" (orn. vis>=0.5) kareye gore yeniden tanimlamak;
-      ayrica ayni forensics'i MOT17-05'te de calistirip orada da ayni
-      kok nedenin gecerli olup olmadigini dogrulamak (bkz. "Faz 3.1" sonu)
+      duzeltildi (bkz. "Faz 3.1").
+- [x] **Faz 3.1 replikasyonu (MOT17-05):** ayni kod/esik/taksonomi, BASKA
+      hicbir sey degistirilmeden, MOT17-05'te calistirildi -- **TAMAMEN
+      FARKLI dagilim cikti: E sadece %6.5 (2/31, MOT17-04'te %95.7),
+      baskin kategori D=gercek ID-switch (15/31).** Sinir-belirsizligi
+      sorunu GENEL bir ORR problemi degil, MOT17-04'e (asiri yogun sahne)
+      OZGUYMUS -- MOT17-05'teki %40.0 ORR guvenilir, artefakttan
+      etkilenmemis. Faz 3.2 (esik yeniden tanimi) bu yuzden artik oncelikli
+      DEGIL -- once metrigin ne zaman anlamli oldugu anlasildi, sonra
+      degistirilmedi. Bkz. "Faz 3.1 replikasyonu" bolumu
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
