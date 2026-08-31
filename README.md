@@ -684,6 +684,56 @@ agregat ID-switch'in Baseline'in gerisinde kalmasi) bu sonucla tutarli --
 ayni kok nedenin (kalabalik/occlusion sinirinda kirilgan eslesme) farkli
 metriklerdeki yansimalari.
 
+## Faz 2.10 — "association failure" hipotezi test edildi ve ELENDI (2026-08-27)
+
+Faz 2.9'un teshisinde bulunan 5 ornekten 1'i ("kalabalik sahnede iyi bir aday
+baska bir GT kimlik tarafindan greedy eslestirmede once kapiliyor") ile
+digerlerini ("hic tespit yok" veya "esik alti kismi ortusme") ayirt etmek
+icin **tek, izole degisken** test edildi: `evaluation/occlusion_recovery_rate.py`'nin
+`_match_gt_to_hyp()` fonksiyonu greedy'den Hungarian'a (`scipy.optimize.
+linear_sum_assignment`) gecirildi -- `evaluation/mot_metrics.py`'nin (motmetrics)
+MOTA/IDF1 icin zaten kullandigi prensiple tutarli hale getirildi. **Onemli
+ayrim:** bu, tracker'in KENDI canli atamasini degistirmiyor -- `tracking/
+adaptive_tracker.py` ve `tracking/bytetrack_wrapper.py` zaten bu oturumdan
+ONCE beri Hungarian kullaniyordu (`linear_sum_assignment`, satir 294 ve 70).
+Degisen sadece ORR'u OLCEN degerlendirme betiginin GT<->hipotez eslestirmesi.
+
+13 birim testle (`tests/test_occlusion_recovery_rate.py`) once senkron veride
+doğrulandı -- ozellikle `test_hungarian_matching_recovers_candidate_greedy_would_have_stolen`,
+Faz 2.9'daki gercek deseni elle kurup Hungarian'in greedy'nin kacirdigi
+gecerli eslesmeyi bulduğunu kanıtlıyor. Sonra MOT17-04 gercek verisiyle
+yeniden olculdu:
+
+| Metrik | Greedy (Faz 2.9) | Hungarian (Faz 2.10) |
+|---|---:|---:|
+| Toplam occlusion event | 28 (23 pencere-ici + 5 pencere-disi) | 28 (ayni -- GT gorunurluk zaman cizelgesine bagli, eslestirmeden bagimsiz) |
+| Gecerli once/sonra cifti (search_window=5) | 0/23 | 0/23 |
+| Gecerli once/sonra cifti (search_window=15) | 0/23 | 0/23 |
+| Gecerli once/sonra cifti (search_window=30) | 1/23 | 1/23 |
+| ORR (search_window=30, n=1) | %100 (raporlanamaz) | %100 (raporlanamaz) |
+| Genel kare-seviyesi eslesme orani | %34.7 (7445/21451) | **%34.7 (7445/21451) -- bit-bit ayni** |
+
+**Sonuc: SIFIR olculebilir degisiklik.** Kullanicinin onceden kaydedilmis
+hipotezi ("kucuk bir artis olabilir ama dramatik cozmemeli") dogrulanmadi --
+gercekte beklenenden de netti, hicbir sayı degismedi. Bu, MOT17-04'un
+frame_level_match_rate'inde binlerce (kare,gt) ciftinden gecen genel toplamda
+bile hicbir fark yaratmiyor; sinir-karesi ornekleri de dahil. **Association
+failure hipotezi deneysel olarak elendi: tracker zaten Hungarian kullaniyordu,
+degerlendirme katmanini da Hungarian yapmak MOT17-04'un olculebilirlik
+sorununu hic etkilemedi.** Faz 2.9'daki 5 orneklik teshis genellemesi dogru
+cikti: baskın sebep atama algoritmasi degil, **detection recall/IoU hassasiyeti**
+-- occlusion sinirinda YOLO bazen kismen gorunen kisiyi hic tespit etmiyor,
+bazen tespit ediyor ama kutu GT ile yeterince ortusmuyor. Bu, atama
+algoritmasi (greedy VEYA Hungarian, farketmiyor) tarafindan duzeltilemeyecek
+bir sinir.
+
+**Sonraki adim icin anlami:** "Faz 3" yatirimi association-katmanina
+(state machine, farkli eslestirme) degil, **occlusion sinirindaki detection
+guvenilirligine** yonelmeli -- ornegin YOLO conf_threshold sweep'i, veya
+kalabalikta ortusen kisileri bastiran NMS'in occlusion-sinirindaki etkisinin
+olculmesi. Bu oturumda henuz UYGULANMADI, sadece bir onceki hipotezin
+elenmesiyle yon netlesti.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -743,6 +793,15 @@ metriklerdeki yansimalari.
 - [ ] MOT17-05'te ID-switch hala yuksek (50->65) -- fps-farkindaligi MOTA'yi
       duzeltti ama bu sekansin kimlik-surekliligi sorunu ayrica arastirilmali
       (Faz 2.9'daki %40-46 ORR de ayni sorunu dogruluyor)
+- [x] **Faz 2.10:** "association failure" hipotezi izole test edildi --
+      ORR'un GT<->hipotez eslestirmesi greedy'den Hungarian'a gecirildi
+      (tracker'in kendisi zaten Hungarian kullaniyordu). **MOT17-04'te SIFIR
+      olculebilir degisiklik** (kare-seviyesi eslesme orani bit-bit ayni,
+      %34.7); hipotez elendi. Bkz. "Faz 2.10" -- sonraki yon artik detection
+      recall/IoU hassasiyeti (occlusion sinirinda), association algoritmasi degil.
+- [ ] Faz 3 adayi (henuz baslanmadi): occlusion sinirinda detection
+      guvenilirligi -- YOLO conf_threshold sweep + NMS'in kalabalikta
+      ortusen kisileri bastirma etkisinin olculmesi (bkz. "Faz 2.10" sonu)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida

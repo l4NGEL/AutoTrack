@@ -1,6 +1,8 @@
 import math
 
-from evaluation.occlusion_recovery_rate import compute_orr, frame_level_match_rate, summarize_events
+from evaluation.occlusion_recovery_rate import (
+    _match_gt_to_hyp, compute_orr, frame_level_match_rate, summarize_events,
+)
 
 BOX = (0.0, 0.0, 20.0, 40.0)  # IoU=1.0 ile kendisiyle eslesir, hepsi ayni yerde durur
 
@@ -167,6 +169,34 @@ def test_frame_level_match_rate_nan_when_no_visible_gt():
     n_visible, n_matched, rate = frame_level_match_rate({}, {})
     assert n_visible == 0 and n_matched == 0
     assert math.isnan(rate)
+
+
+def test_hungarian_matching_recovers_candidate_greedy_would_have_stolen():
+    # Faz 2.9'da bulunan gercek desen: hyp=100, iki GT icin de gecerli (>=0.5)
+    # aday ama gt=2 icin DAHA IYI (0.667 > 0.538). Eski GREEDY once en yuksek
+    # skoru (gt=2, hyp=100, 0.667) alirdi -> hyp=100 tukenir -> gt=1'in TEK
+    # adayi (hyp=100) elden gider -> gt=1 ESLESMEZ (elle dogrulandi, bkz. Faz 2.9/2.10
+    # yorumlari). Hungarian TUM kombinasyonlari birlikte degerlendirip toplam
+    # IoU'yu maksimize eden atamayi (gt=1->hyp=100, gt=2->hyp=200) bulur --
+    # ikisi de gecerli, hicbiri "calinmiyor".
+    gt_rows = [
+        (1, (0.0, 0.0, 10.0, 10.0), 0.9),   # sadece hyp=100 ile gecerli (IoU=0.538)
+        (2, (5.0, 0.0, 15.0, 10.0), 0.9),   # hyp=100 ile 0.667, hyp=200 ile 0.538 -- iki gecerli adayi var
+    ]
+    hyp_rows = [
+        (100, (3.0, 0.0, 13.0, 10.0)),
+        (200, (8.0, 0.0, 18.0, 10.0)),
+    ]
+
+    result = _match_gt_to_hyp(gt_rows, hyp_rows)
+
+    assert result == {1: 100, 2: 200}  # ikisi de eslesti -- greedy'de gt=1 eslesmeyecekti
+
+
+def test_match_gt_to_hyp_handles_empty_inputs():
+    assert _match_gt_to_hyp([], []) == {}
+    assert _match_gt_to_hyp([(1, (0.0, 0.0, 10.0, 10.0), 0.9)], []) == {}
+    assert _match_gt_to_hyp([], [(100, (0.0, 0.0, 10.0, 10.0))]) == {}
 
 
 def test_summarize_events_counts_and_orr_ratio():

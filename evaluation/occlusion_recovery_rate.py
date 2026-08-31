@@ -36,6 +36,14 @@ genisletmek bunu telafi eder ama pencereyi cok genisletmek "occlusion'dan
 onceki/sonraki durum" yerine "iyice sonraki durum"u olcmeye baslar -- bu yuzden
 birden fazla search_window degeriyle raporlaniyor (bkz. README "Faz 2.9").
 
+Faz 2.10: `_match_gt_to_hyp` greedy'den Hungarian'a (`linear_sum_assignment`)
+gecirildi -- Faz 2.9'daki 5 ornekten 1'i ("iyi aday baska kimlik tarafindan
+kapildi") tam olarak bu fonksiyonun greedy davranisiydi; diger 4'u (hic
+tespit yok / esik alti kismi ortusme) atama algoritmasiyla ilgisiz, detector
+recall sorunu. Hungarian'a gecince MOT17-04'un olculebilirligi nasil
+degisti/degismedi icin bkz. README "Faz 2.10" -- bu, "association failure"
+hipotezini ELEMEK icin tasarlanmis bir test, iyilesme garantisi degil.
+
 Kullanim:
     python -m evaluation.occlusion_recovery_rate --sequence MOT17-04-FRCNN
     python -m evaluation.occlusion_recovery_rate --sequence MOT17-04-FRCNN --checkpoint checkpoints/osnet_market1501/model/model.pth.tar-15
@@ -45,6 +53,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from detection.yolo_detector import YoloDetector
 from evaluation.mot_metrics import read_seq_fps
@@ -79,21 +88,34 @@ def _load_gt_all_visibility(gt_path) -> dict:
 
 
 def _match_gt_to_hyp(gt_rows, hyp_rows) -> dict:
-    """Basit greedy IOU eslestirme (en yuksek IOU'dan baslar) -- {gt_id: hyp_id}."""
-    pairs = []
-    for gt_id, gt_box, _ in gt_rows:
-        for hyp_id, hyp_box in hyp_rows:
-            score = iou_xyxy(gt_box, hyp_box)
-            if score >= IOU_MATCH_THRESH:
-                pairs.append((score, gt_id, hyp_id))
-    pairs.sort(reverse=True)
-    matched_gt, matched_hyp, result = set(), set(), {}
-    for score, gt_id, hyp_id in pairs:
-        if gt_id in matched_gt or hyp_id in matched_hyp:
-            continue
-        result[gt_id] = hyp_id
-        matched_gt.add(gt_id)
-        matched_hyp.add(hyp_id)
+    """Global-optimal IoU eslestirme (Hungarian, `scipy.optimize.linear_sum_assignment`)
+    -- {gt_id: hyp_id}. `evaluation/mot_metrics.py` (motmetrics) MOTA/IDF1 icin
+    ayni prensiple eslesir -- bu fonksiyon artik onunla metodolojik olarak
+    tutarli (Faz 2.10, bkz. README).
+
+    Faz 2.9'da bu fonksiyonun ESKI (greedy, en yuksek skordan baslayan) hali,
+    kalabalik bir karede gecerli (IoU>=0.5) bir adayin baska bir GT kimlik
+    tarafindan -- o kimligin TOPLAMDA daha iyi bir secenegi olsa bile -- once
+    kapilmasina yol acabiliyordu. Hungarian butun kombinasyonlari birlikte
+    degerlendirip TOPLAM IoU'yu maksimize eden atamayi bulur, bu riski ortadan
+    kaldirir. Bu, ORR olcumunu ETKILER ama tracker'in KENDI canli atamasini
+    ETKILEMEZ -- `tracking/adaptive_tracker.py` ve `tracking/bytetrack_wrapper.py`
+    zaten bu oturumdan once beri Hungarian kullaniyordu; degisen sadece bu
+    DEGERLENDIRME betiginin GT<->hipotez eslestirmesi."""
+    if not gt_rows or not hyp_rows:
+        return {}
+    gt_ids = [g[0] for g in gt_rows]
+    hyp_ids = [h[0] for h in hyp_rows]
+    cost = np.empty((len(gt_rows), len(hyp_rows)), dtype=float)
+    for i, (_, gt_box, _vis) in enumerate(gt_rows):
+        for j, (_, hyp_box) in enumerate(hyp_rows):
+            cost[i, j] = 1.0 - iou_xyxy(gt_box, hyp_box)
+
+    row_idx, col_idx = linear_sum_assignment(cost)
+    result = {}
+    for r, c in zip(row_idx, col_idx):
+        if cost[r, c] <= 1.0 - IOU_MATCH_THRESH:  # yani gercek IoU >= esik
+            result[gt_ids[r]] = hyp_ids[c]
     return result
 
 
