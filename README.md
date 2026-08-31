@@ -976,6 +976,69 @@ bu, daha once bahsedilen "sinir karesini vis>=0.5'e gore yeniden tanimlama"
 fikrinden FARKLI bir iş (o boundary-frame SECIMIYLE ilgiliydi, bu ise
 occlusion event'in TANIMININ kendisiyle ilgili).
 
+## Faz 3.3 — Partial Visibility Persistence Forensics: 7 sekansta yayginlik olculdu (2026-08-31)
+
+Kullanicinin acik istegiyle -- **ORR'un tanimini SESSIZCE genisletmeden**,
+ayri bir script/metrik olarak -- `evaluation/partial_visibility_forensics.py`
+yazildi. PARTIAL_VISIBILITY event = bir GT kimligin ARDISIK >=60 kare
+(reid_recovery_window ile ayni) boyunca 0.20<=vis<0.50 kalmasi. Her episode
+RETAINED/RECOVERED/FRAGMENTED/PERMANENT_LOSS'a ayrildi; basarisiz olanlarin
+kayip-baslangic karesi P1-P4'e (NO_DETECTION/LOW_IOU/TRACK_THRESH_GATE/
+ASSIGNMENT_CONFLICT) siniflandirildi. 17 birim test -- biri, ilk versiyonda
+gercek bir hata buldu (`find_loss_transition_frame` bosluksuz ani ID
+degisimlerini kacirip yanlislikla None donduruyordu; duzeltildi).
+
+7 sekansin TUMUNDE calistirildi (kullanicinin "once yayginligi olcelim"
+talebi):
+
+| Sekans | Episode | RETAINED | RECOVERED | FRAGMENTED | PERM._LOSS | PVTR | Frag. Orani |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| MOT17-02 | 1 | 0 | 0 | 0 | 1 | %0.0 | %0.0 |
+| MOT17-04 | **38** | 0 | 3 | 2 | 33 | %7.9 | %5.3 |
+| MOT17-05 | 1 | 0 | 0 | 0 | 1 | %0.0 | %0.0 |
+| MOT17-09 | 2 | 0 | 1 | 1 | 0 | %50.0 | %50.0 |
+| MOT17-10 | 1 | 0 | 0 | 1 | 0 | %0.0 | %100.0 |
+| MOT17-11 | 0 | - | - | - | - | - | - |
+| MOT17-13 | 0 | - | - | - | - | - | - |
+| **TOPLAM** | **43** | **0** | **4** | **4** | **35** | **%9.3** | **%9.3** |
+
+**Bulgu: bu hata modu MOT17-04'e YOGUN sekilde ozgu.** 43 episode'un
+**%88.4'u (38/43) tek basina MOT17-04'te.** Faz 3.1'in "mean_crowd"
+olcusuyle (ayni sekans-basi ortalama kalabalik sayisi) korelasyon
+**r=0.935 (n=7)** -- Faz 3.1'in E-orani korelasyonundan (r=0.892) bile
+daha guclu. MOT17-11 ve MOT17-13'te bu hata modu HIC gozlenmiyor (0
+episode). Yani bu, Faz 3.1'in kok-neden bulgusuyla (sinir-belirsizligi de
+yogunlukla korele) AYNI dogrultuda: **AutoTrack'in tracker/detector
+zayifliklari genel olarak degil, ozellikle asiri-yogun sahnelerde
+(MOT17-04 gibi) yoğunlaşiyor.**
+
+**Carpici, ayrı bir gozlem: 43 episode'un HICBIRI (%0) RETAINED degil** --
+yani 60+ karelik hicbir surekli-kismi-gorunurluk penceresinde tracker
+BOSLUKSUZ takip saglayamamis. Bu, "kismen gorunen bir kisiyi 2+ saniye
+kesintisiz izlemek" gercekten zor bir bar oldugunu gosteriyor. Agregat
+P1-P4 dagilimi (39 basarisiz episode'un tumunde): **P1 (hic tespit yok)
+%48.7 (19/39)** en baskin, sonra P2 (dusuk IoU) %33.3 (13/39), P3
+(tracker'in kendi guven esigi reddediyor) %12.8 (5/39), P4 (baska kimlige
+kapilma) %5.1 (2/39) -- Faz 3.0/3.1'in bulgusuyla tutarli: asil darbogaz
+detection recall/lokalizasyon, association algoritmasi degil.
+
+**Durustce belirtilmesi gereken bir sinir-etkisi:** Faz 3.2'yi baslatan
+gt_id=3 vakasi (MOT17-04, hyp 7->40) burada **RECOVERED** olarak
+etiketlendi, FRAGMENTED degil -- cunku 278-464 penceresinde (episode
+sinirlari) hyp SADECE 7'ye eslesiyor (sonra surekli None); hyp=40'a
+GERCEK gecis frame 478'de, yani vis 0.5'i asip "normal gorunur" rejimine
+GIRDIKTEN SONRA oluyor. Kok-neden teshisi (orta-siddette surekli kismi
+gorunurluk sirasinda kaybolma) hala dogru, ama "FRAGMENTED" etiketi
+episode'un KENDI sinirlarina gore hesaplandigi icin bu spesifik ornek
+farkli bir kutuya dusuyor -- bu bir hata degil, sinir-tabanli tanimin
+dogal bir sonucu, ama gizlenmemesi gereken bir nuans.
+
+**Sonraki adim kullanicinin karari:** yayginlik artik olculdu (MOT17-04'e
+yogun ozgu, diger sekanslarda nadir/yok). Yeni bir tracker fazina gerek
+olup olmadigina (ornegin partial-visibility rejiminde daha agresif bir
+Re-ID/motion agirlik kaymasi) bu veriyle karar verilebilir -- bu oturumda
+UYGULANMADI.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1078,9 +1141,17 @@ occlusion event'in TANIMININ kendisiyle ilgili).
       SADECE vis<0.2 event sayiyor, bu durumu hic kapsamiyor. Ayrica "P=0.04"
       etiketinin tracker guveni DEGIL, priority_engine skoru oldugu
       duzeltildi. Sonraki adim kullanicinin kararini bekliyor. Bkz. "Faz 3.2"
-- [ ] Faz 3.2'nin actigi soru: occlusion event tanimini orta-araliktaki
-      (vis 0.2-0.5) uzun surekli-dusuk-gorunurluk pencerelerini de kapsayacak
-      sekilde genisletmek (henuz uygulanmadi, kullanicinin karari bekleniyor)
+- [x] **Faz 3.3:** Partial Visibility Persistence Forensics -- Faz 3.2'nin
+      hata modunun yayginligi 7 sekansta olculdu (AYRI script/metrik,
+      ORR'un tanimi degistirilmedi). **43 episode'un %88.4'u (38/43) TEK
+      BASINA MOT17-04'te** -- kalabalikla korelasyon r=0.935 (Faz 3.1'in
+      E-orani korelasyonundan bile guclu). MOT17-11/13'te bu hata modu HIC
+      yok. 43 episode'un HICBIRI RETAINED degil; basarisiz episode'lerin
+      %48.7'si P1 (hic tespit yok) -- Faz 3.0/3.1'in bulgusuyla tutarli.
+      17 birim test (biri gercek bir hata buldu, duzeltildi). Bkz. "Faz 3.3"
+- [ ] Faz 3.3'un actigi soru: partial-visibility rejiminde daha agresif
+      Re-ID/motion agirlik kaymasi gibi yeni bir tracker fazina gerek olup
+      olmadigi -- yayginlik artik olculdu, karar kullaniciya ait
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
