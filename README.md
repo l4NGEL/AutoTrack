@@ -931,6 +931,51 @@ esigi degistir -> duzeldi gibi gorunur") boylece 6 bagimsiz replikasyonla
 (sadece 1 degil) ELENDI -- metrik degistirilmeden once, HANGI kosullarda
 anlamli oldugu once, sayisal olarak anlasilmis oldu.
 
+## Faz 3.2 — kullanicinin ekran goruntusu dogrulandi: "orta siddette surekli kismi gorunurluk" YENI bir hata modu (2026-08-31)
+
+Kullanicinin gerçek demo videosunda ("bu proje çalışıyor mu" sorusuna cevaben
+uretilen, `config_demo.yaml`, guncel en iyi pipeline) verdigi iki ekran
+goruntusu ("5. saniye" ve "25. saniye", ayni kisi farkli ID) tahminle degil,
+GT zemininde dogrulandi. `evaluation/trace_track_lifecycle.py` (Hungarian
+GT<->hyp eslestirmesi, HER karede) + `evaluation/snapshot_frames.py`
+(tam overlay'li PNG, kullanicinin ekran goruntusuyle piksel-piksel
+karsilastirma icin) yazildi. 9 birim test.
+
+**Onemli, ayri bir duzeltme:** ekran goruntusundeki "P=0.04" degeri tracker
+guveni DEGIL -- `decision/priority_engine.py`'nin "hassas bolge" uyari
+onceligi (hiz/bolge/bekleme agirlikli, `viz/overlay_renderer.py:53`). Gercek
+tracking-guven sinyali "[uncertain]" etiketi (`track_confidence` -- det_conf/
+motion/reid agirlikli kombinasyon -- 0.5-0.75 araliginda).
+
+**Bulgu (kesin, tahmin degil):** iki ekran goruntusu de AYNI GT kimlige
+(gt_id=3) ait -- 100. karede hyp=7, 500. karede hyp=**40**, GT konumu
+(`crop_gt3_frame500.png`) ile piksel-piksel dogrulandi. Tam hyp gecmisi:
+`7 (kare 1-292, kucuk bir bosluk haric) -> BOSLUK (kare 293-477, 184 kare)
+-> 40 (kare 478-524)`.
+
+**Asil onemli kisim:** bu 184 karelik bosluk boyunca GT gorunurlugu
+**HICBIR ZAMAN 0.2'nin ALTINA DUSMEDI** (minimum ~0.34, kare 280-475
+arasinda surekli 0.33-0.45 araliginda) -- yani Faz 2.9-3.1'in TUM
+metodolojisinin (`occlusion_recovery_rate.py`, `occlusion_event_forensics.py`)
+"occlusion event" tanimina (vis<0.2) gore bu GENÇ **hic bir occlusion
+event'i olarak bile sayilmiyor**. Kisi direge yakin durup ORTA siddette,
+SURDURULEBILIR sekilde kismen gorunur kaliyor (~6 saniye gercek zaman) --
+ne tam kaybolmus (Faz 2.5'in "7/46, 9 saniyelik gercek occlusion, tasarim
+disi" durumu GIBI degil) ne de tam gorunur. Tracker bu orta-siddetli
+durumda IoU>=0.5 eslesmeyi 184 kare boyunca (60 karelik `reid_recovery_window`'un
+3 kati) kaybediyor.
+
+**Anlami:** bu, Faz 2.9-3.1'in olcemedigi/kapsamadigi YENI bir hata modu --
+"agir occlusion" ile "hic occlusion yok" arasindaki bosluk. Simdiki ORR/
+forensics metodolojisi SADECE vis<0.2 olaylarini event sayiyor; bu tur
+"surekli orta-kismi-gorunurluk" durumlarini hic gormuyor. Sonraki adim
+(henuz uygulanmadi, kullanicinin karari bekleniyor): occlusion event
+tanimini vis<0.2'den genisletip orta-araliktaki (orn. 0.2-0.5) uzun
+surekli-dusuk-gorunurluk pencerelerini de "event" sayan ayri bir analiz --
+bu, daha once bahsedilen "sinir karesini vis>=0.5'e gore yeniden tanimlama"
+fikrinden FARKLI bir iş (o boundary-frame SECIMIYLE ilgiliydi, bu ise
+occlusion event'in TANIMININ kendisiyle ilgili).
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1021,9 +1066,21 @@ anlamli oldugu once, sayisal olarak anlasilmis oldu.
       problemi degil, sahne yogunluguyla korele, MOT17-04 (kalabalik 41.0,
       digerlerinin ~3 kati) gercek bir dis deger. ORR guvenilirlik sirasi:
       05/09/11 en guvenilir (E<%30), 02/13 orta, 10/04 neredeyse olcum-disi
-      (E>%60). Faz 3.2 (esik yeniden tanimi) 6/7 replikasyonla artik
-      oncelikli DEGIL -- once metrigin ne zaman anlamli oldugu sayisal
-      olarak anlasildi, sonra degistirilmedi. Bkz. "Faz 3.1 replikasyonu"
+      (E>%60). Sinir-karesi esigini vis>=0.5'e gore yeniden tanimlama fikri
+      6/7 replikasyonla artik GENEL bir duzeltme olarak oncelikli DEGIL --
+      once metrigin ne zaman anlamli oldugu sayisal olarak anlasildi, sonra
+      degistirilmedi. Bkz. "Faz 3.1 replikasyonu"
+- [x] **Faz 3.2:** kullanicinin gercek demo videosunda gordugu "5s/25s ayni
+      kisi farkli ID" ekran goruntusu GT zemininde dogrulandi (tahmin degil)
+      -- **YENI bir hata modu bulundu: "orta siddette surekli kismi
+      gorunurluk"** (gt_id=3, hyp 7->40, 184 karelik bosluk, GT gorunurluk
+      HICBIR ZAMAN 0.2 altina dusmedi). Faz 2.9-3.1'in TUM metodolojisi
+      SADECE vis<0.2 event sayiyor, bu durumu hic kapsamiyor. Ayrica "P=0.04"
+      etiketinin tracker guveni DEGIL, priority_engine skoru oldugu
+      duzeltildi. Sonraki adim kullanicinin kararini bekliyor. Bkz. "Faz 3.2"
+- [ ] Faz 3.2'nin actigi soru: occlusion event tanimini orta-araliktaki
+      (vis 0.2-0.5) uzun surekli-dusuk-gorunurluk pencerelerini de kapsayacak
+      sekilde genisletmek (henuz uygulanmadi, kullanicinin karari bekleniyor)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
