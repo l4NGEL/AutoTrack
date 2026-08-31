@@ -1,6 +1,7 @@
 from detection.yolo_detector import Detection
 from evaluation.occlusion_event_forensics import (
     _best_detection_at,
+    _boundary_vis_range,
     _classify_side,
     _crowd_stats,
     classify_event,
@@ -104,3 +105,22 @@ def test_best_detection_at_picks_highest_iou_and_its_confidence():
 
 def test_best_detection_at_empty_frame_returns_zero():
     assert _best_detection_at({}, frame=1, gt_box=BOX) == (0.0, 0.0)
+
+
+def test_boundary_vis_range_ignores_non_E_side_even_when_event_label_is_E():
+    # GERCEK bug (MOT17-02 calistirmasinda bulundu, bkz. README): once
+    # taraf "A" (vis=0.82, E'yle ILGISIZ), sonra taraf "E" (vis=0.21) --
+    # event'in GENEL etiketi oncelik sirasina gore "E" olur (E > A), ama
+    # 0.82 E'ye sebep olan bir deger DEGIL, dahil edilmemeli.
+    rows = [
+        {"vis_before": 0.82, "vis_after": 0.21, "reason_before": "A", "reason_after": "E", "label": "E"},
+        {"vis_before": 0.22, "vis_after": 0.23, "reason_before": "E", "reason_after": "E", "label": "E"},
+    ]
+    lo, hi, n = _boundary_vis_range(rows)
+    assert lo == 0.21 and hi == 0.23  # 0.82 ARALIGA GIRMEMELI
+    assert n == 3  # sadece gercekten E'ye sebep olan 3 taraf (0.21, 0.22, 0.23)
+
+
+def test_boundary_vis_range_none_when_no_E_reasons():
+    rows = [{"vis_before": 0.9, "vis_after": 0.9, "reason_before": None, "reason_after": None, "label": "RECOVERED"}]
+    assert _boundary_vis_range(rows) is None

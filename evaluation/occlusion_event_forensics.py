@@ -210,6 +210,22 @@ def _collect_raw_features(within: list, gt_by_frame_full: dict, hyp_by_frame_xyx
     return raw_rows
 
 
+def _boundary_vis_range(rows: list) -> tuple | None:
+    """E'ye GERCEKTEN sebep olan taraflarin gorunurluk araligi -- (min, max, n)
+    ya da hic yoksa None. DIKKAT: event'in GENEL etiketi ("label") degil, o
+    TARAFIN kendi reason'u "E" olmali -- bir event E etiketi alabilir cunku
+    SADECE bir tarafi belirsiz-gorunurluk (digeri A/B/C/basarili olabilir);
+    event.label=="E" ile filtrelemek o "diger" tarafin E'yle ilgisiz vis
+    degerini de karisik olarak katar (bkz. MOT17-02 calistirmasinda bulunan
+    yaniltici 0.20-0.82 araligi -- gercekte E'ye sebep olan taraflar hep
+    dar bir aralikta)."""
+    vis_values = ([r["vis_before"] for r in rows if r["reason_before"] == "E"] +
+                  [r["vis_after"] for r in rows if r["reason_after"] == "E"])
+    if not vis_values:
+        return None
+    return min(vis_values), max(vis_values), len(vis_values)
+
+
 def _classify_raw_rows(raw_rows: list) -> list:
     """Ham olculere (pahali kisim) SINIFLANDIRMA mantigini (ucuz, hizli)
     uygular -- --from-cache ile bu fonksiyon TEK BASINA tekrar calistirilabilir."""
@@ -284,9 +300,10 @@ def main():
         if counts.get(label):
             print(f"  {label:10s} {counts[label]}")
 
-    vis_values = [r["vis_before"] for r in rows if r["label"] == "E"] + [r["vis_after"] for r in rows if r["label"] == "E"]
-    if vis_values:
-        print(f"  E etiketli taraflarin gorunurluk araligi: {min(vis_values):.2f}-{max(vis_values):.2f}")
+    vis_range = _boundary_vis_range(rows)
+    if vis_range:
+        lo, hi, n = vis_range
+        print(f"  E'ye sebep olan taraflarin gorunurluk araligi: {lo:.2f}-{hi:.2f} (n={n})")
 
     print(f"\n=== ORR ozeti ({args.sequence}, search_window={SEARCH_WINDOW}, ayni pencere-ici event'ler) ===")
     summarize_events(raw_rows, args.sequence)
