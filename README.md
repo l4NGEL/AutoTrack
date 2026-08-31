@@ -734,6 +734,88 @@ kalabalikta ortusen kisileri bastiran NMS'in occlusion-sinirindaki etkisinin
 olculmesi. Bu oturumda henuz UYGULANMADI, sadece bir onceki hipotezin
 elenmesiyle yon netlesti.
 
+## Faz 3.0 — YOLO conf_threshold sweep: recall arttı, ORR-olculebilirligi degismedi (2026-08-27)
+
+Faz 2.10'un isaret ettigi yonde, kullanicinin spesifik istegiyle
+`evaluation/run_confidence_sweep.py` yazildi: MOT17-04'te 5 conf_threshold
+degeri (0.35/0.30/0.25/0.20/0.15) denendi, **SADECE bu degisti** -- ReID
+checkpoint, fps-farkinda mesafe butcesi, embedding gallery, LostTrack
+penceresi, Hungarian atama, NMS IoU esigi hep sabit (Faz 2.7-2.10'daki
+"en iyi" -- condition D -- konfigurasyonu).
+
+**Yazarken ayri, onemli bir bulgu ortaya cikti:** `AdaptiveTracker.
+track_thresh` (varsayilan 0.5) `update()` icinde YOLO'nun kendi
+`conf_threshold`'undan BAGIMSIZ, IKINCI bir guven esigi uyguluyormus.
+Faz 2.x'in TUM onceki scriptleri bunu hic override etmedi -- yani
+YOLO conf_threshold=0.35 olarak ayarlanmis olsa bile, tracker 0.35-0.5
+arasindaki her tespiti SESSIZCE atiyordu; efektif esik hep 0.5'ti. Bu
+sweep'in 0.5 altindaki degerleri gercekten test edebilmesi icin
+`track_thresh=0.0` set edildi. (Sweep'in conf=0.35 satirinin MOTA'sinin
+-- %29.6 -- Faz 2.8'in raporladigi %29.4'e yakin cikmasi kismen
+tesaduf: 0.35-0.5 araligindaki ek tespitlerin katkisi/gurultusu bu
+sekansta birbirini büyük ölçüde götürmüş.)
+
+**Performans:** 5 kez YOLO+OSNet calistirmak yerine, en dusuk esikte
+(0.15) BIR KEZ tespit+embedding cikarilip daha yuksek esikler o tek
+pass'in ciktisi filtrelenerek elde edildi. Bu bir yaklasiklik degil,
+matematiksel olarak esdeger: Ultralytics conf-filtreyi NMS'ten ONCE
+uyguluyor, standart greedy NMS'te bir kutu sadece kendinden YUKSEK
+skorlu bir kutu tarafindan bastirilabilir -- yani X esiginde hayatta
+kalacak her kutu, 0.15'teki NMS'ten de ayni sekilde sag cikar (bkz.
+`run_confidence_sweep.py` docstring'i icin tam ispat). 5 gercek karede
+(baslangic/orta/occlusion-bolgesi/son) fresh-run ile post-filtre
+birebir ayni sonucu verdigi ayrica dogrulandi. 3 yeni birim test
+(`tests/test_confidence_sweep.py`).
+
+| Conf | Frame Match% | Valid ORR Ev. | ORR | MOTA | IDF1 | IDSW | FP | FN |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.35 (baseline) | 41.6% | 1/23 | %100 | 0.296 | 0.456 | 31 | 2595 | 12468 |
+| 0.30 | 44.8% | 1/23 | %100 | **0.310** | 0.501 | **27** | 2992 | 11779 |
+| 0.25 | 47.5% | 1/23 | %0 | 0.297 | **0.508** | 34 | 3860 | 11192 |
+| 0.20 | 49.0% | 1/23 | %0 | 0.260 | 0.481 | 47 | 4997 | 10840 |
+| 0.15 | 51.5% | 1/23 | %0 | 0.181 | 0.439 | 82 | 7205 | **10284** |
+
+**Iki ayri, kismen celisen sonuc var -- ikisi de dogru, karistirilmamali:**
+
+1. **MOT metrikleri kullanicinin hipoteziyle uyumlu bir "sweet spot" gosteriyor
+   (~0.25-0.30).** IDF1 0.25'te tepe yapiyor (%50.8), MOTA 0.30'da (%31.0).
+   0.25'in altinda cöküs baslıyor: IDSW 27'den 82'ye (3x), FP 2992'den
+   7205'e (2.4x) firliyor, MOTA %31.0'dan %18.1'e cakiliyor. Kullanicinin
+   onceden yazdigi egri tarifiyle ("Detection Recall ↑, ama bir noktadan
+   sonra FP ↑↑, IDSW ↑, MOTA ↓") birebir eslesiyor.
+
+2. **Ama asil arastirma sorusu -- occlusion sinirinin ÖLÇÜLEBİLİRLİĞİ --
+   conf_threshold'a HİÇ tepki vermedi.** Genel kare-seviyesi eslesme orani
+   %41.6'dan %51.5'e (+10 puan) net bir sekilde yukselirken, "gecerli
+   once/sonra cifti" 23 event'in TAMAMINDA sabit kaldi: 1/23, degismedi.
+   Yani genel sahnede COK daha fazla insan tespit edilir hale geldi, ama
+   Faz 2.9/2.10'da tespit edilen 22 olculemeyen event hala olculemiyor --
+   conf_threshold'u 0.35'ten 0.15'e (genis bir aralik) indirmek bile bu
+   spesifik 22 event'e tek bir tane bile eklemedi. **Bu, "detection recall
+   dusuk oldugu icin olculemiyor" aciklamasini da buyuk olcude zayiflatiyor**
+   -- eger basit recall sorunu olsaydi, esik bu kadar genis bir aralikta
+   degismesine ragmen hicbir yeni event'in olculebilir hale gelmemesi
+   beklenmezdi. Daha olasi aciklama: bu 22 event'teki kisiler o denli
+   agir/tam occlude oluyor ki (veya kutu GT ile o kadar kotu ortusuyor ki)
+   hicbir makul guven esigi yardimci olmuyor -- recall degil, lokalizasyon/
+   siddet sorunu.
+
+3. **Tek olculebilir event (n=1) bile conf dustukce KOTULESTI:** 0.35/0.30'da
+   kurtarilmis (ORR=%100), 0.25 ve altinda kurtarilmamis hale geldi
+   (ORR=%0) -- daha dusuk esikte gelen ekstra (muhtemelen gurultulu)
+   tespitler, tam da tutarliligini olcebildigimiz TEK ornekte kimlik
+   karisikligina katkida bulunmus olabilir (IDSW egrisiyle tutarli).
+
+**Sonuc: conf_threshold sweep, MOT metrikleri icin gercek ve kullanisli bir
+sweet-spot (~0.25-0.30) buldu, ama Faz 2.9'un ana sorusunu (occlusion
+sinirinda ORR neden olculemiyor) COZMEDI -- sadece "basit recall sorunu"
+hipotezini de byuk olcude zayiflatti.** Kullanicinin talep ettigi disiplin
+geregi baska hicbir sey degistirilmedi; bu net bir sonuc, hosumuza gitmese
+de saklanmiyor. Sonraki adim muhtemelen NMS/crowded-scene analizi degil,
+bu 22 event'in kendisini (kutu boyutlari, gorunurluk yuzdeleri, kalabalik
+yogunlugu) tek tek incelemek olmali -- "esik ayari" tipi bir cozumun bu
+sorunu cozmesi beklenmiyor artik.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -799,9 +881,18 @@ elenmesiyle yon netlesti.
       olculebilir degisiklik** (kare-seviyesi eslesme orani bit-bit ayni,
       %34.7); hipotez elendi. Bkz. "Faz 2.10" -- sonraki yon artik detection
       recall/IoU hassasiyeti (occlusion sinirinda), association algoritmasi degil.
-- [ ] Faz 3 adayi (henuz baslanmadi): occlusion sinirinda detection
-      guvenilirligi -- YOLO conf_threshold sweep + NMS'in kalabalikta
-      ortusen kisileri bastirma etkisinin olculmesi (bkz. "Faz 2.10" sonu)
+- [x] **Faz 3.0:** YOLO conf_threshold sweep (0.35->0.15, MOT17-04, tek
+      degisken disipliniyle) -- **frame-level recall %41.6->%51.5 arttı ama
+      23 event'in "gecerli olculebilir" sayisi 1'de SABIT kaldi**, hicbir
+      esik degeri yeni bir event acmadi. MOT metrikleri icin gercek bir
+      sweet-spot var (~0.25-0.30: IDF1 tepe %50.8, MOTA tepe %31.0, altinda
+      IDSW 3x/FP 2.4x patlıyor) ama bu, Faz 2.9'un ana ölçülebilirlik
+      sorununu cozmuyor. Yan bulgu: `track_thresh=0.5` tum onceki fazlarda
+      sessiz IKINCI bir esikmiş. Bkz. "Faz 3.0" -- "basit recall sorunu"
+      hipotezi de zayifladi, sonraki adim esik ayari degil.
+- [ ] Faz 3.1 adayi (henuz baslanmadi): olculemeyen 22 event'in kendisini
+      tek tek incelemek (kutu boyutu, gorunurluk yuzdesi, kalabalik
+      yogunlugu) -- esik-tabanli cozumler tukendi (bkz. "Faz 3.0" sonu)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
