@@ -816,6 +816,75 @@ bu 22 event'in kendisini (kutu boyutlari, gorunurluk yuzdeleri, kalabalik
 yogunlugu) tek tek incelemek olmali -- "esik ayari" tipi bir cozumun bu
 sorunu cozmesi beklenmiyor artik.
 
+## Faz 3.1 — Occlusion Event Forensics: kok neden bulundu, tracker/detector DEGIL (2026-08-27)
+
+Kullanicinin onerdigi taksonomiyle (`evaluation/occlusion_event_forensics.py`),
+MOT17-04'un 23 pencere-ici event'inin HER BIRI tek tek incelendi. Her event
+icin once/sonra sinir karesinde: gorunurluk, GT kutu alani, kalabalik sayisi,
+en-iyi-tespit IoU'su (`conf>=0.15`, tam sekans taramasi degil sadece 44
+benzersiz sinir karesinde -- hizli), ve o TAM karede Hungarian GT<->hyp
+eslesmesi olup olmadigi olculdu. Basarisiz taraflar E (belirsiz-gorunurluk
+sinir karesi, vis<0.3) > A (hic tespit yok) > B (dusuk IoU) > C (iyi IoU var
+ama baska kimlige kapilmis) onceligiyle, basarili event'ler D (ID-switch)
+veya RECOVERED olarak etiketlendi. 16 birim test (`tests/test_occlusion_event_forensics.py`).
+
+**Yazip ilk calistirdiktan sonra KENDI script'imde gercek bir hata bulundu
+ve duzeltildi -- bu da raporlanmasi gereken bir sey:** ilk versiyon, bir
+tarafin basarili/basarisiz oldugunu SADECE o TAM sinir karesindeki dar
+tanidan (`reason_before`/`after`) belirliyordu, `compute_orr`'un asil
+arama-penceresi (search_window=30) ile bulmus oldugu gercek sonucu
+(`before_hyp`/`after_hyp`) once kontrol etmeden. Sonuc: Faz 2.9/2.10'da
+zaten bilinen TEK gecerli+kurtarilmis event (gt_id=134, kare 381-400) bile
+yanlislikla "E" etiketi almisti, cunku tam sinir karesinde gorunurluk
+belirsizdi -- ama gercekte arama penceresi birkac kare otede gecerli bir
+eslesme BULMUSTU. Duzeltme: basari/basarisizlik ONCE `before_hyp`/`after_hyp`'e
+(otoriter, arama-penceresi-farkinda sonuc) gore belirleniyor; sinir-karesi
+tanisi SADECE o taraf GERCEKTEN basarisizsa devreye giriyor. Duzeltmeden
+sonra 134 dogru sekilde "RECOVERED" cikti -- yeni bir regresyon testiyle
+(`test_classify_event_search_window_rescue_is_not_mislabeled_by_exact_frame_reason`)
+kilitlendi. Script, pahali (13-15 dk) tespit+takip kismini tekrar
+calistirmadan siniflandirma mantigini duzeltip yeniden denemeyi mumkun kilan
+bir cache (`evaluation/_cache/`, gitignore'lu) da kaydediyor.
+
+**Sonuc, cok net ve tek bir aciklamaya isaret ediyor:**
+
+| Etiket | Sayi |
+|---|---:|
+| E (belirsiz-gorunurluk sinir karesi) | **22 / 23** |
+| RECOVERED | 1 / 23 |
+
+**23 event'in 22'sinde de -- ISTISNASIZ -- once/sonra sinir karesindeki
+gorunurluk 0.20 ile 0.23 arasinda, yani vis>=0.2 esiginin HEMEN ustunde.**
+Bu rastlantisal degil: "sinir karesi" tanimi zaten "occlusion baslamadan
+ONCEKI SON gorunur kare" / "occlusion bittikten sonraki ILK gorunur kare" --
+gorunurluk kare-kareye YUMUSAK degistigi icin, bir esigi asagi/yukari GECEN
+ilk/son kare, MATEMATIKSEL OLARAK o esigin hemen yaninda olmak zorunda.
+`VIS_MARGIN_THRESH=0.3` esigi veriye BAKMADAN once sectirildi (0.2 taban
+cizgisinin ustunde, "gercekten guvenli gorunur" saymak icin makul bir pay)
+-- ve gozlenen degerlerin TAMAMI (max 0.23) zaten bunun cok altinda kaldi,
+yani esik veriye gore ayarlanmadi, veri esigi rahatlikla gecti.
+
+**Bu, Faz 3.0'in bulgusunu tam olarak aciklıyor.** conf_threshold'u
+0.35'ten 0.15'e indirmek hicbir event'i kurtarmadi, cunku sorun detector'in
+o kisiyi YETERINCE guvenle tespit edememesi degildi -- sorun, ORR'un
+"sinir karesi" olarak SECTIGI anin, tanimi geregi zaten en-belirsiz-gorunum
+anı olmasi. Hicbir guven esigi bunu duzeltemez, cunku mesele detector'in
+performansi degil, HANGI KARENIN referans alindigi. **Association algoritmasi
+(Faz 2.10) degil, detection recall (Faz 3.0) degil -- kok neden ORR
+metriginin sinir-karesi TANIMI.**
+
+**Sonraki adim (Faz 3.2, henuz uygulanmadi):** sinir karesini "esigi
+gecen ilk/son kare" yerine "esigi GUVENLE gecen ilk/son kare" olarak
+yeniden tanimlamak -- ornegin vis>=0.5 sartiyla, gerekirse occlusion
+gap'inin disina birkac kare daha genisleterek arama yapmak. Bu, ORR'un
+olcmeye calistigi asil soruyu ("kişi GERCEKTEN gorunur hale geldiginde
+ayni ID'yi mi koruyor") degistirmiyor, sadece "ne zaman gercekten gorunur
+sayilir" tanimini saglamlastiriyor. **Bu bulgu MOT17-05'te (Faz 2.9'da
+gercek %40-46 ORR olculebilen sekans) DOGRULANMADI** -- orada ayni
+forensics'i calistirmak, oradaki ORR sayisinin da ayni sinir-tanimi
+sorunundan mi etkilendigini yoksa gercekten farkli bir rejimde mi oldugunu
+gosterecek.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -890,9 +959,19 @@ sorunu cozmesi beklenmiyor artik.
       sorununu cozmuyor. Yan bulgu: `track_thresh=0.5` tum onceki fazlarda
       sessiz IKINCI bir esikmiş. Bkz. "Faz 3.0" -- "basit recall sorunu"
       hipotezi de zayifladi, sonraki adim esik ayari degil.
-- [ ] Faz 3.1 adayi (henuz baslanmadi): olculemeyen 22 event'in kendisini
-      tek tek incelemek (kutu boyutu, gorunurluk yuzdesi, kalabalik
-      yogunlugu) -- esik-tabanli cozumler tukendi (bkz. "Faz 3.0" sonu)
+- [x] **Faz 3.1:** 23 event'in HER BIRI tek tek incelendi (Occlusion Event
+      Forensics, A/B/C/D/E taksonomisi) -- **KOK NEDEN BULUNDU: 22/23'unde
+      once/sonra sinir karesindeki gorunurluk 0.20-0.23 arasinda, yani
+      vis>=0.2 esiginin hemen ustunde.** Bu tracker/detector hatasi degil,
+      ORR'un "sinir karesi" TANIMININ matematiksel sonucu (esigi
+      gecen ilk/son kare, esigin hemen yaninda olmak ZORUNDA). Faz 3.0'in
+      neden hicbir sey degistirmedigini tam olarak aciklıyor. Yazarken
+      script'in kendi siniflandirma mantiginda gercek bir hata bulunup
+      duzeltildi (bkz. "Faz 3.1"). MOT17-05'te dogrulanmadi -- acik madde.
+- [ ] Faz 3.2 adayi (henuz uygulanmadi): ORR sinir-karesi tanimini
+      "esigi guvenle gecen" (orn. vis>=0.5) kareye gore yeniden tanimlamak;
+      ayrica ayni forensics'i MOT17-05'te de calistirip orada da ayni
+      kok nedenin gecerli olup olmadigini dogrulamak (bkz. "Faz 3.1" sonu)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida

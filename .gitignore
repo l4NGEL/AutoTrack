@@ -20,3 +20,6 @@ data/verify_*.png
 data/lifecycle_*.json
 data/mot17_reid_finetune/
 checkpoints/osnet_mot_finetuned/
+
+# Faz 3.1: occlusion_event_forensics.py'nin ham-olcum cache'i (yeniden uretilebilir)
+evaluation/_cache/
