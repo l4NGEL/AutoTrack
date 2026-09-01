@@ -1039,6 +1039,49 @@ olup olmadigina (ornegin partial-visibility rejiminde daha agresif bir
 Re-ID/motion agirlik kaymasi) bu veriyle karar verilebilir -- bu oturumda
 UYGULANMADI.
 
+## Faz 3.4 — kucuk prototip: galeriyi PRIMARY eslesmede de kullanmak, SIFIR fark yaratti (2026-08-31/09-01)
+
+Faz 3.3'un actigi soruya kullanicinin istegiyle **kucuk, izole bir
+prototip** denendi -- `tracking/adaptive_tracker.py`'ye (AutoTrack'in asil
+kodu) HIC DOKUNMADAN. Somut gozlem: `_reid_score` (PRIMARY cost matrix,
+her karede) SADECE `track.embedding`'i (tek EMA-blended gorunum)
+kullaniyor; `embedding_gallery` (Faz 2.5) SADECE `_try_revive`'de (kayip
+kurtarma) kontrol ediliyor, aktif takip sirasinda HIC degil. Hipotez:
+galeriyi PRIMARY eslesmede de (EMA ile galeri-en-iyi-benzerliginin
+MAKSIMUMU) kullanmak, partial-visibility sirasinda gorunum degisince
+yardimci olabilir.
+
+`evaluation/prototype_gallery_reid.py`: `AdaptiveTracker`'in bir ALT
+SINIFI (`GalleryAwareTracker`), SADECE `_reid_score`'u override eder, geri
+kalan HER SEY birebir ayni. 6 birim test. MOT17-04'un 38 episode'unda
+baseline'a karsi calistirildi:
+
+| Metrik | Baseline | Prototip |
+|---|---:|---:|
+| RETAINED / RECOVERED / FRAGMENTED / PERMANENT_LOSS | 0/3/2/33 | 0/3/2/33 |
+| PVTR | %7.9 | %7.9 |
+| Fragmentation Rate | %5.3 | %5.3 |
+
+**Sonuc: BIT-BIT AYNI -- hicbir episode'un sonucu degismedi.** Bu net,
+temiz bir negatif sonuc, saklanmiyor. Onceden beklenen bir sinir vardi:
+basarisiz 35 episode'un P1(19)+P3(4)=23'u (%65.7) bu fikirle PRENSIPTE
+duzelemezdi (P1: hic tespit yok, cost matrix'e giren bir sey yok; P3:
+tespit `track_thresh` esiginde -- cost matrix'e/ReID skoruna HIC
+ULASMADAN -- zaten eleniyor). Ama geriye kalan P2(11)+P4(1)=12 (%34.3,
+"teorik olarak ulasilabilir") icin de SIFIR degisiklik olmasi ayrica
+bilgilendirici: **muhtemel aciklama, `_cost_matrix`'teki mesafe siniri
+(`max_dist`) adaylari ReID skoru hesaplanmadan ONCE eliyor** -- yani bu
+durumlarda darbogaz ReID'nin ayirt edicilik gucu degil, mesafe kapisinin
+kendisi (bu hipotez bu oturumda AYRICA test EDILMEDI, sadece sonuctan
+cikarilan en olasi aciklama).
+
+**Anlami:** "galeriyi primary eslesmede kullan" fikri, en azindan bu
+haliyle, AutoTrack'e tasinmaya deger DEGIL -- olcumlenebilir hicbir
+katkisi yok. Gercek darbogaz (P1 detection recall + muhtemelen mesafe
+kapisi) baska yerde. Bu, kullanicinin sordugu "denemeye deger mi"
+sorusunu net bir "hayir, bu haliyle degil" ile cevapliyor -- ve bunu
+gercek koda dokunmadan, ucuz bir prototiple ogrenmis olduk.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1149,9 +1192,17 @@ UYGULANMADI.
       yok. 43 episode'un HICBIRI RETAINED degil; basarisiz episode'lerin
       %48.7'si P1 (hic tespit yok) -- Faz 3.0/3.1'in bulgusuyla tutarli.
       17 birim test (biri gercek bir hata buldu, duzeltildi). Bkz. "Faz 3.3"
-- [ ] Faz 3.3'un actigi soru: partial-visibility rejiminde daha agresif
-      Re-ID/motion agirlik kaymasi gibi yeni bir tracker fazina gerek olup
-      olmadigi -- yayginlik artik olculdu, karar kullaniciya ait
+- [x] **Faz 3.4:** kucuk, izole prototip (`GalleryAwareTracker`, asil koda
+      dokunmadan) -- embedding gallery'yi PRIMARY eslesmede de kullanmak
+      MOT17-04'un 38 partial-visibility episode'unda **BIT-BIT SIFIR fark**
+      yaratti (PVTR %7.9->%7.9). Basarisiz episode'lerin %65.7'si (P1+P3)
+      bu fikirle prensipte duzelemezdi; kalan %34.3'te de degisiklik
+      olmamasi mesafe sinirinin (`max_dist`) darbogaz olabilecegini
+      dusunduruyor (test EDILMEDI, sadece cikarim). Bu fikir AutoTrack'e
+      TASINMAYA DEGER DEGIL. Bkz. "Faz 3.4"
+- [ ] Faz 3.3/3.4'un actigi soru: partial-visibility rejiminde mesafe
+      siniri (`max_dist`) gercekten darbogaz mi -- test edilmedi; asil
+      darbogaz muhtemelen detection recall (P1, bkz. Faz 3.0/3.3)
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
