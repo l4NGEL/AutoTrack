@@ -7,6 +7,35 @@ tespit eder, kare kare takip eder ve tanimli kurallara gore hangi hedefin
 oncelikli oldugunu **acikca gerekcelendirerek** belirler. Algila -> takip et ->
 karar ver zincirinin acik kaynak, portfoy olcekli implementasyonu.
 
+## Öne çıkanlar
+
+Bu proje "YOLO + tracker bağladım" seviyesinde değil -- gerçek MOT17
+benchmark verisiyle, 7 sekansta, çok-fazlı bir **kök-neden araştırması**.
+Her iddia bir sonraki fazda broader/held-out veriyle test edildi; yaklaşık
+yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
+
+- **Gerçek eğitim + gerçek benchmark:** OSNet Re-ID, Market-1501 üzerinde
+  sıfırdan eğitildi (Rank-1 %88.6, mAP %72.0), sonra MOT domenine fine-tune
+  edildi; tüm sonuçlar 7 gerçek MOT17 sekansında (`motmetrics` ile
+  MOTA/IDF1/ID-switch) ölçüldü.
+- **Bir ID-switch şikayeti, tam bir araştırma zincirine dönüştü:**
+  association algoritması (Hungarian -- zaten vardı) elendi → detection
+  recall hipotezi zayıflatıldı (conf_threshold sweep) → asıl kök neden
+  bulundu (ORR metriğinin sınır-karesi tanımı, kalabalıkla **r=0.892**
+  korele, 7 sekansta doğrulandı) → ikinci, ayrı bir hata modu keşfedildi
+  (sürekli kısmi görünürlük, **r=0.935** korele) → önerilen bir düzeltme
+  izole bir prototipte test edildi (**negatif sonuç, saklanmadı**).
+- **Kendi kodunda bulunup düzeltilen gerçek hatalar:** hayalet-kutu çizim
+  hatası, iki ayrı mesafe-sınırı hatası (685px ve 309px'lik imkansız
+  sıçramalar), fps-körlüğü (bir sekansta MOTA -%10.6'ya çöküyordu),
+  NumPy 2.0/PyTorch 2.6 uyumluluk kırılmaları, ve arka-plan analiz
+  araçlarının kendisinde bulunan 3 ayrı sınıflandırma hatası.
+- **120 birim test**, gerçek video/checkpoint gerektirmeyen mantık
+  katmanı için; her yeni bulgu önce senkron veriyle kilitlendi.
+
+Detaylı, kronolojik faz-faz döküm (Faz 1'den Faz 3.4'e, her biri gerçek
+sayılar ve dürüst sınırlamalarla) aşağıda.
+
 ## Mimari
 
 Iki izleyici modu var, ayni Hungarian-atama koduna giren ortak bir arayuz
