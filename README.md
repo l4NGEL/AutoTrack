@@ -1235,7 +1235,7 @@ gercek koda dokunmadan, ucuz bir prototiple ogrenmis olduk.
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
-- [ ] GitHub yayini
+- [x] GitHub yayini — private, `github.com/l4NGEL/AutoTrack`
 
 ## Demo video
 
