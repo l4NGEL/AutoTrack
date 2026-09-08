@@ -32,6 +32,13 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   araçlarının kendisinde bulunan 3 ayrı sınıflandırma hatası.
 - **120 birim test**, gerçek video/checkpoint gerektirmeyen mantık
   katmanı için; her yeni bulgu önce senkron veriyle kilitlendi.
+- **Kapsam genişletme testi de aynı disiplinle:** README'nin iddia ettiği
+  "drone kamerası" senaryosu VisDrone-MOT ile ilk kez gerçek veride
+  sınandı -- sonuç "iyi çalışıyor" değil, **detector'un COCO-eğitimli
+  ağırlıklarla bu ölçekte "person" sınıfını hiç tespit edemediği**, kök
+  nedeniyle (ham YOLO çıktısı incelenerek) doğrulandı. Sonuç olumsuz
+  çıkınca pahalı takip-analizi scriptleri BİLİNÇLİ OLARAK çalıştırılmadı
+  -- yanlış katmanda zaman harcamamak için.
 
 Detaylı, kronolojik faz-faz döküm (Faz 1'den Faz 3.4'e, her biri gerçek
 sayılar ve dürüst sınırlamalarla) aşağıda.
