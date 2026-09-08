@@ -1111,6 +1111,71 @@ kapisi) baska yerde. Bu, kullanicinin sordugu "denemeye deger mi"
 sorusunu net bir "hayir, bu haliyle degil" ile cevapliyor -- ve bunu
 gercek koda dokunmadan, ucuz bir prototiple ogrenmis olduk.
 
+## Faz 4.0 — Hava/Drone Genelleme Doğrulaması: detector'un kendisi çöktü (2026-09-05)
+
+Kullanıcının "kapsamı genişletelim" isteğiyle -- README'nin en basindan
+beri iddia ettigi ama bu proje boyunca (Faz 1-3.4) HİÇ test edilmedi
+"drone kamerasi" senaryosu ilk kez gerçek veriyle sınandı.
+**VisDrone-MOT** (Hugging Face `Voxel51/visdrone-mot` mirror'i -- gerçek
+VisDrone sekans adlandırması, `pedestrian_density` etiketi, gerçek
+`index` (track ID) alanı doğrulandı) -- yoğunluk ekseninde en net
+kontrastı veren 2 sahne seçildi:
+
+| Sahne | Yoğunluk | Kare | GT nesne |
+|---|---|---:|---:|
+| `uav0000305_00000_v` | low | 184 | 602 |
+| `uav0000137_00458_v` | high | 233 | 9128 |
+
+`evaluation/visdrone_adapter.py` (yeni) VisDrone'un FiftyOne-native
+`samples.json`'ini MOT17 ile BİREBİR AYNI dizin yapısına (`img1/`+`gt/`+
+`seqinfo.ini`) çevirir -- 7 birim test. **Dürüstçe belirtilmesi gereken
+iki yaklaşıklık:** (1) VisDrone'un `visibility` alanı İKİLİ (0/1),
+MOT17'nin sürekli değeri gibi değil -- bu, Faz 3.3'ün kısmi-görünürlük
+analizini bu veri kümesinde yapısal olarak imkansız kılıyor; (2)
+`frameRate=30`, VisDrone'un dogrulanmis cekim hizi degil, FiftyOne'in
+kendi app-config varsayilani. Mevcut `occlusion_recovery_rate.py`/
+`occlusion_event_forensics.py`/`partial_visibility_forensics.py`'ye
+geriye-uyumlu bir `--data-dir` parametresi eklendi (varsayılan hala
+MOT17) -- kod TEKRARLANMADI, aynı script'ler VisDrone'da da çalışır.
+
+**Sonuç (guncel en iyi config, HIÇBIR parametre değişmeden):**
+
+| Sahne | MOTA | IDF1 | IDSW | FP | FN | GT |
+|---|---:|---:|---:|---:|---:|---:|
+| `uav0000305_00000_v` (low) | **%0.0** | %0.0 | 0 | 0 | **602/602** | 602 |
+| `uav0000137_00458_v` (high) | **-%7.4** | %11.4 | 15 | 1416 | 8377/9128 | 9128 |
+
+**Kök neden, tahmin degil dogrudan dogrulandi:** low-density sahnede
+FN=GT_obj=602 -- tracker'in bulabildigi SIFIR gercek eslesme var. Bunun
+bir pipeline hatasi mi yoksa gercek bir genelleme basarisizligi mi
+oldugunu ayirt etmek icin tek bir karede ham YOLO ciktisi (`conf>=0.01`,
+TUM siniflar) incelendi: model **baska sınıfları tespit ediyor** (araba,
+kamyon -- yanlis siniflandirilmis olsa da bir sinyal var) ama GT'deki 3
+gercek insan kutusunun (30x20, 27x20, 25x24 PIKSEL -- yani 500-600 piksel
+alan) hicbirine yakin, "person" etiketli, kullanilabilir-guvenli hicbir
+tespit yok; `conf>=0.01` gibi gurultu seviyesinde bir esikte bile
+bulunan 10 "person" adayi GT konumlariyla ORTUSMUYOR (en yakini bile
+~150px uzakta). **Bu, MOT17'de bulunan hicbir hata moduyla (crowd-
+density korelasyonu, partial-visibility) ilgisi olmayan, cok daha temel
+bir sorun: `yolov8n.pt` (vanilla COCO agirliklari) bu hava-acisi/olcekte
+(~20-30px insan kutulari) "person" sinifini pratikte HIC tespit
+edemiyor.** COCO'nun egitim dagilimi (yer-seviyesi/yakin-mesafe
+insanlar) ile VisDrone'un ust-tan-asagi, cok kucuk-olcekli
+goruntusu arasindaki fark, tracker/Re-ID katmaninin hic devreye
+giremeyecegi kadar buyuk.
+
+**Bu yuzden asil arastirma sorusu (MOT17'nin kalabalik-bagimli hata
+modlari hava goruntusune genelleniyor mu?) bu turda CEVAPLANAMADI** --
+tespit katmani calismadigi icin takip katmaninin davranisi olculemez
+(pahali `occlusion_event_forensics.py`/`partial_visibility_forensics.py`
+kosulari bu yuzden BİLİNÇLİ OLARAK calistirilmadi -- buyuk ihtimalle
+sadece "%100 tespit yok" tekrarlarlardi, yeni bilgi vermeden saatlerce
+hesaplama harcardi). **Sonraki adim netlesti ama bu oturumda
+UYGULANMADI:** VisDrone'un KENDI egitim-bolumundeki insan kutulariyla
+YOLO'yu (veya hazir bir VisDrone-egitilmis checkpoint) fine-tune etmeden,
+bu veri kumesinde anlamli bir MOT16/olcum yapilamaz -- karar
+kullaniciya ait.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1236,6 +1301,18 @@ gercek koda dokunmadan, ucuz bir prototiple ogrenmis olduk.
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
 - [x] GitHub yayini — private, `github.com/l4NGEL/AutoTrack`
+- [x] **Faz 4.0:** hava/drone genelleme dogrulamasi (VisDrone-MOT, 2 sahne,
+      low/high yogunluk) -- **detector'un kendisi cokuyor**: low-density'de
+      MOTA/IDF1=%0, FN=GT_obj (SIFIR gercek eslesme); dogrudan ham-YOLO
+      incelemesiyle dogrulandi -- `yolov8n.pt` bu hava-acisi/olcekte
+      (~20-30px) "person" sinifini pratikte tespit edemiyor. Asil arastirma
+      sorusu (kalabalik-korelasyonu hava goruntusune genelleniyor mu)
+      CEVAPLANAMADI -- tespit calismadan takip katmani olculemez. Sonraki
+      adim (VisDrone-egitilmis detector) kullanicinin kararini bekliyor.
+      Bkz. "Faz 4.0"
+- [ ] Faz 4.1 (gercek-zamanli/gomulu) ve Faz 4.2 (coklu kamera) -- Faz 4.0
+      sonucuna gore ERTELENDI: detector calismadan bu ikisinin tasarimi
+      anlamli sekillenemez (bkz. onaylanmis plan, "Faz 4.0" bolumu)
 
 ## Demo video
 

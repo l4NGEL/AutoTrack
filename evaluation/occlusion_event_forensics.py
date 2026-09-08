@@ -246,6 +246,8 @@ def main():
     parser.add_argument("--from-cache", action="store_true",
                          help="Pahali detection/tracking pass'ini atla, bu sekans icin onceki calistirmadan "
                               "kaydedilen ham olculeri kullan (SADECE siniflandirma mantigini test/duzelt icin)")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR,
+                         help="Faz 4.0: MOT17-tarzi baska bir veri kokune (orn. data/VisDrone) yonlendirmek icin")
     args = parser.parse_args()
     cache_path = CACHE_DIR / f"occlusion_event_forensics_raw_{args.sequence}.json"
 
@@ -255,7 +257,7 @@ def main():
         print(f"=== Cache'ten yukleniyor: {cache_path} (detection/tracking ATLANDI) ===")
         raw_rows = json.loads(cache_path.read_text(encoding="utf-8"))
     else:
-        seq_dir = DATA_DIR / args.sequence
+        seq_dir = args.data_dir / args.sequence
         gt_by_frame_full = _load_gt_all_visibility(seq_dir / "gt" / "gt.txt")
         seq_fps = read_seq_fps(seq_dir)
 

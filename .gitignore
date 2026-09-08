@@ -26,3 +26,7 @@ evaluation/_cache/
 
 # snapshot_frames.py'nin ciktisi (goruntuleme/debug icin, yeniden uretilebilir)
 data/snapshots/
+
+# Faz 4.0: indirilen VisDrone-MOT ham verisi + adaptorun uretttigi MOT17-tarzi kopya (buyuk, git'e commit'lenmez)
+data/visdrone_raw/
+data/VisDrone/

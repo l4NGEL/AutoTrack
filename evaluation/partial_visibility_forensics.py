@@ -184,10 +184,12 @@ def main():
     parser.add_argument("--sequence", default=DEFAULT_SEQUENCE)
     parser.add_argument("--from-cache", action="store_true")
     parser.add_argument("--limit-frames", type=int, default=None, help="Hizli duman testi icin")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR,
+                         help="Faz 4.0: MOT17-tarzi baska bir veri kokune (orn. data/VisDrone) yonlendirmek icin")
     args = parser.parse_args()
     cache_path = CACHE_DIR / f"partial_visibility_raw_{args.sequence}.json"
 
-    seq_dir = DATA_DIR / args.sequence
+    seq_dir = args.data_dir / args.sequence
     gt_by_frame_full = _load_gt_all_visibility(seq_dir / "gt" / "gt.txt")
     n_frames = max(gt_by_frame_full.keys())
 

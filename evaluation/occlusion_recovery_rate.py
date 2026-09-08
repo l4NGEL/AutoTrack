@@ -220,10 +220,12 @@ def main():
     parser.add_argument("--max-recovery-gap", type=int, default=60)
     parser.add_argument("--search-windows", default="5,15,30",
                          help="Virgulle ayrilmis, denenecek search_window degerleri (bkz. modul docstring)")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR,
+                         help="Faz 4.0: MOT17-tarzi baska bir veri kokune (orn. data/VisDrone) yonlendirmek icin")
     args = parser.parse_args()
     search_windows = [int(v) for v in args.search_windows.split(",")]
 
-    seq_dir = DATA_DIR / args.sequence
+    seq_dir = args.data_dir / args.sequence
     gt_by_frame_full = _load_gt_all_visibility(seq_dir / "gt" / "gt.txt")
     seq_fps = read_seq_fps(seq_dir)  # Faz 2.8: fps-farkinda mesafe butcesi icin
 
