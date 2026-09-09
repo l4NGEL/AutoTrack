@@ -10,3 +10,4 @@ torchvision>=0.16.0
 torchreid>=0.2.5
 motmetrics>=1.4.0      # evaluation/ icin (MOTA, IDF1, ID switch)
 pytest>=8.0.0
+gradio>=4.44.0          # interface/app.py icin (video yukle / PC kamerasi / IP kamera arayuzu)

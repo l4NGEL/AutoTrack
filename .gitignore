@@ -30,3 +30,6 @@ data/snapshots/
 # Faz 4.0: indirilen VisDrone-MOT ham verisi + adaptorun uretttigi MOT17-tarzi kopya (buyuk, git'e commit'lenmez)
 data/visdrone_raw/
 data/VisDrone/
+
+# Arayuz (interface/app.py): yuklenen videolarin islenmis ciktilari, calistirma-zamaninda uretilir
+interface/_runs/

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "autotrack-interface",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["interface/app.py"],
+      "port": 7860
+    }
+  ]
+}
