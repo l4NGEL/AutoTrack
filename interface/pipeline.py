@@ -74,9 +74,15 @@ class TrackingPipeline:
         conf_threshold: float = 0.35,
         reid_checkpoint: str | None = DEFAULT_REID_CHECKPOINT,
         fps: float = 30.0,
-        person_only: bool = True,
+        classes: tuple[int, ...] | None = (0,),
     ):
-        self.detector = self._get_detector(model_weights, conf_threshold, person_only)
+        # classes: takip edilecek COCO sinif id'leri. (0,) = sadece 'person'
+        # (varsayilan), None = TUM 80 COCO sinifi. Re-ID (OSNet) yalnizca
+        # 'person' icin gecerlidir -- diger siniflar icin AdaptiveTracker
+        # otomatik olarak sadece IOU + Kalman hareketiyle eslesir (gamma=0,
+        # bkz. compute_adaptive_weights / REID_ELIGIBLE_CLASSES).
+        self.classes = tuple(sorted(classes)) if classes else None
+        self.detector = self._get_detector(model_weights, conf_threshold, self.classes)
         self.tracker = AdaptiveTracker(
             track_thresh=0.5,
             track_buffer=30,
@@ -92,13 +98,15 @@ class TrackingPipeline:
         self.frame_count = 0
 
     @staticmethod
-    def _get_detector(model_weights: str, conf_threshold: float, person_only: bool) -> YoloDetector:
-        key = (model_weights, conf_threshold, person_only)
+    def _get_detector(
+        model_weights: str, conf_threshold: float, classes: tuple[int, ...] | None
+    ) -> YoloDetector:
+        key = (model_weights, conf_threshold, classes)
         if key not in _detector_cache:
             _detector_cache[key] = YoloDetector(
                 weights=model_weights,
                 conf_threshold=conf_threshold,
-                classes=[0] if person_only else None,  # COCO 0 = person
+                classes=list(classes) if classes else None,
             )
         return _detector_cache[key]
 

@@ -132,9 +132,12 @@ motorunu kullanır, `main.py`'nin kendisine hiç dokunmadan:
 | **IP Kamera** | Bir RTSP/HTTP akış URL'si girip sunucu tarafında bağlanır (örn. `rtsp://kullanici:sifre@192.168.1.50:554/stream1`) -- tarayıcı izni gerekmez |
 
 Notlar:
-- Her üç modda da "sadece `person` sınıfı" anahtarı var -- kapatılırsa
-  tüm COCO sınıfları takip edilir ama Re-ID sadece kişiler için geçerli
-  kalır (bkz. `REID_ELIGIBLE_CLASSES`).
+- Her üç modda da bir **"Takip edilecek sınıflar"** seçicisi var
+  (Kişi, Araba, Otobüs, Kamyon, Bisiklet, Köpek, Valiz, ...). Varsayılan
+  sadece Kişi; boş bırakılırsa 80 COCO sınıfının tamamı. Re-ID (OSNet)
+  yalnızca Kişi için geçerli -- diğer sınıflar IOU + Kalman hareketiyle
+  takip edilir (`AdaptiveTracker` bunu otomatik yapar, bkz.
+  `REID_ELIGIBLE_CLASSES` / `compute_adaptive_weights`).
 - Hassas bölge (zone) overlay'i **bilinçli olarak kapalı**: `config.yaml`
   içindeki poligonlar belirli bir sahnenin çözünürlüğüne göre elle
   ayarlanmış, rastgele bir video/webcam görüntüsüne uygulanması anlamsız
