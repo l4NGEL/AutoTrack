@@ -303,7 +303,7 @@ def _class_picker(elem_id: str):
 
 # --------------------------------------------------------------------- Arayuz
 
-with gr.Blocks(title="AutoTrack", theme=THEME, css=CSS) as demo:
+with gr.Blocks(title="AutoTrack") as demo:
     gr.HTML(HEADER_HTML)
 
     with gr.Tabs():
@@ -380,4 +380,4 @@ def _prewarm():
 
 if __name__ == "__main__":
     _prewarm()
-    demo.queue().launch()
+    demo.queue().launch(theme=THEME, css=CSS)
