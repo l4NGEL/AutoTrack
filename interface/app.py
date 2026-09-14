@@ -213,6 +213,9 @@ def _new_session_id():
 
 # --------------------------------------------------------------------- Tema/stil
 
+# Renk/tipografi/aralik kararlari ve NEDEN'leri: bkz. design-system/autotrack/MASTER.md
+# (ui-ux-pro-max skill ile uretilip bu projenin gercek urun/stack'ine gore elle
+# duzeltildi -- kontrast oranlari orada hesaplanmis olarak kayitli).
 THEME = gr.themes.Soft(
     primary_hue=gr.themes.colors.emerald,
     secondary_hue=gr.themes.colors.emerald,
@@ -225,56 +228,176 @@ THEME = gr.themes.Soft(
     block_background_fill="#ffffff",
     block_background_fill_dark="#1b1d17",
     block_border_width="1px",
-    block_radius="12px",
+    # Soft temasinin varsayilani (12px + yumusak golge) her AI-demo'sunun ayni
+    # "emerald + hap-yuvarlak + golge" kalibina sokuyordu -- kose yaricapini
+    # sikilastirip golgeyi tamamen kaldirdik, daha "teknik alet/rapor" gibi
+    # dursun diye (bkz. tasarim notu, MASTER.md SS6).
+    block_radius="6px",
+    block_shadow="none",
+    block_shadow_dark="none",
+    input_radius="6px",
+    input_shadow="none",
+    input_shadow_focus="none",
+    checkbox_border_radius="4px",
+    container_radius="8px",
     # Etiketler duz metin olsun -- varsayilan Soft temasi bunlari dolu
     # (primary renkli) rozetlere ceviriyor, asiri gorunuyor.
     block_label_background_fill="transparent",
     block_label_background_fill_dark="transparent",
     block_label_border_width="0px",
-    block_label_text_color="*neutral_500",
-    block_label_text_color_dark="*neutral_400",
+    block_label_text_color="#5b6660",
+    block_label_text_color_dark="#9ba39a",
     block_label_text_weight="500",
     block_label_text_size="*text_sm",
-    button_large_radius="10px",
-    button_small_radius="8px",
+    button_large_radius="6px",
+    button_small_radius="5px",
+    button_medium_radius="5px",
+    button_primary_shadow="none",
+    button_primary_shadow_hover="none",
+    button_primary_shadow_dark="none",
+    button_secondary_shadow="none",
+    button_secondary_shadow_dark="none",
     button_primary_background_fill="#2f6e4d",
-    button_primary_background_fill_hover="#26583e",
+    button_primary_background_fill_hover="#255a3e",
     button_primary_text_color="#ffffff",
+    button_primary_border_color="#1e4a34",
+    # Koyu modda ayni yesille beyaz metin 4.18:1'e dusuyor (WCAG AA'nin
+    # altinda) -- MASTER.md #2'de olculdu. Cozum: koyu modda daha parlak
+    # bir yesil + koyu metin (6.19:1), beyazi daha da parlaklastirmak yerine
+    # (o da neon bir tona kayardi).
+    button_primary_background_fill_dark="#38a873",
+    button_primary_background_fill_hover_dark="#2f9760",
+    button_primary_text_color_dark="#12140f",
+    button_primary_border_color_dark="#2a6b4c",
     button_secondary_background_fill="*neutral_100",
     button_secondary_background_fill_dark="*neutral_800",
 )
 
 CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+
+:root {
+  --at-bg: #f4f5f0; --at-surface: #ffffff; --at-ink: #1b2320; --at-ink-muted: #5b6660;
+  --at-border: #d8dad2; --at-green: #2f6e4d; --at-green-hover: #255a3e; --at-on-green: #ffffff;
+  --at-red: #a73e29; --at-amber: #8a6a1e; --at-radius: 8px; --at-radius-sm: 6px;
+  --at-serif: 'Fraunces', Georgia, serif;
+}
+.dark {
+  --at-bg: #12140f; --at-surface: #1b1d17; --at-ink: #edefe9; --at-ink-muted: #9ba39a;
+  --at-border: #333b32; --at-green: #38a873; --at-green-hover: #2f9760; --at-on-green: #12140f;
+  --at-red: #c4593f; --at-amber: #c99a3a;
+}
+@media (prefers-color-scheme: dark) {
+  /* .gradio-container hedefleniyor, :root DEGIL: Gradio kendi css=
+     stringini otomatik olarak '.gradio-container ... :root' seklinde
+     yeniden kapsıyor (scope) -- ':root' hicbir zaman bir '.gradio-container'
+     torunu OLAMAYACAGI icin (kok eleman zaten en disarida) bu satir hicbir
+     seye eslenmiyordu, canli DOM'da olculup bulundu. Asil calisan mekanizma
+     zaten Gradio'nun <body> etiketine ekledigi '.dark' sinifi (asagida) --
+     bu blok SADECE o JS-tabanli sinif herhangi bir sebeple gecikirse/
+     calismazsa diye saf CSS yedegi. */
+  .gradio-container { --at-bg: #12140f; --at-surface: #1b1d17; --at-ink: #edefe9; --at-ink-muted: #9ba39a;
+    --at-border: #333b32; --at-green: #38a873; --at-green-hover: #2f9760; --at-on-green: #12140f;
+    --at-red: #c4593f; --at-amber: #c99a3a; }
+}
+
 .gradio-container { max-width: 1060px !important; margin: 0 auto !important; }
+/* Gradio'nun kendi kok kabi ~375px genislikte 11px kadar tasiyor (olculdu --
+   kendi ozel elemanlarimizdan gelmiyor) -- yatay kaydirmayi engelle. */
+html, body { overflow-x: hidden; }
+
 #at-header {
-  position: relative; padding: 24px 30px 20px; margin: 4px 0 10px;
-  background: var(--block-background-fill);
-  border: 1px solid var(--border-color-primary); border-radius: 14px;
+  position: relative; padding: 22px 28px 18px; margin: 4px 0 10px;
+  background: var(--at-surface); border: 1px solid var(--at-border); border-radius: 4px;
 }
 #at-header::before, #at-header::after {
-  content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid #3f8a63;
+  content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--at-green);
 }
-#at-header::before { top: 9px; left: 9px; border-right: 0; border-bottom: 0; }
-#at-header::after { bottom: 9px; right: 9px; border-left: 0; border-top: 0; }
+#at-header::before { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+#at-header::after { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
 #at-header h1 {
-  margin: 0 0 7px; font-size: 1.55rem; font-weight: 600; letter-spacing: -0.015em;
+  margin: 0 0 8px; font-family: var(--at-serif); font-size: 1.9rem; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--at-ink); font-optical-sizing: auto;
 }
-#at-header .at-sub { margin: 0; font-size: 0.88rem; line-height: 1.6; opacity: 0.7; }
+#at-header .at-sub { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--at-ink-muted); }
 #at-header .at-sub code {
   font-size: 0.82em; padding: 1px 5px; border-radius: 5px;
-  background: var(--neutral-100); border: 1px solid var(--border-color-primary);
+  background: var(--at-bg); border: 1px solid var(--at-border); color: var(--at-ink);
 }
-.dark #at-header .at-sub code { background: var(--neutral-800); }
-/* etiketleri iyice sakinlestir */
+
+/* etiketleri iyice sakinlestir -- 'info=' verilen bilesenlerde Soft temasi
+   label'i (span[data-testid=block-info], .has-info) --block-label-text-color
+   DEGIL, primer/accent rengine baglaniyor (canli DOM'da olculup bulundu,
+   sadece THEME.set() yetmedi) -- burada acikca ezmek gerekiyor. */
 .block .label-wrap span, span[data-testid="block-info"], .gradio-container label span:first-child {
-  font-weight: 500 !important;
+  font-weight: 500 !important; color: var(--at-ink-muted) !important;
 }
+
 .at-mono textarea {
-  font-family: var(--font-mono) !important; font-size: 0.83rem !important; line-height: 1.55 !important;
+  font-family: var(--font-mono) !important; font-size: 0.875rem !important; line-height: 1.55 !important;
 }
-.tabs button[role="tab"] { font-weight: 600; font-size: 0.92rem; }
-footer { display: none !important; }
+
+.tabs button[role="tab"] { font-weight: 600; font-size: 0.92rem; transition: color 180ms ease; }
+
+/* sekme basligi ikonlari (bkz. MASTER.md SS6 -- gr.Tab bu Gradio surumunde
+   'icon' parametresi almiyor, bu yuzden ikon sekme icindeki tanitim satirina
+   bagli) */
+.at-icon-row { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 10px; }
+.at-icon-row svg { flex: none; color: var(--at-green); margin-top: 1px; }
+.at-icon-row p { margin: 0; color: var(--at-ink-muted); font-size: 0.9rem; line-height: 1.55; }
+.at-icon-row code {
+  font-family: var(--font-mono); font-size: 0.85em; padding: 1px 5px; border-radius: 5px;
+  background: var(--at-bg); border: 1px solid var(--at-border); color: var(--at-ink);
+}
+
+/* gorunur odak halkasi -- Soft temasinin varsayilanindan daha net (WCAG 2.2
+   1.4.11, 3:1 non-text kontrast: yesil vs yuzey 6.07:1 / 5.68:1, bkz. MASTER.md) */
+.gradio-container button:focus-visible,
+.gradio-container input:focus-visible,
+.gradio-container textarea:focus-visible,
+.gradio-container [role="tab"]:focus-visible,
+.gradio-container [tabindex]:focus-visible {
+  outline: 2px solid var(--at-green) !important; outline-offset: 2px !important;
+}
+
+/* 180ms hover -- transform/scale YOK (duzen kaymasin) */
+.gradio-container button { transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease; }
+
+/* dokunma hedefi >=44px (WCAG 2.5.5 / pre-delivery checklist) -- olculdu:
+   Gradio'nun kendi 'lg' butonu bile varsayilan 40px'ti, buraya kadar
+   varsayilmadi. */
+.gradio-container button.lg, .gradio-container button { min-height: 44px; }
+
+/* Footer'i TAMAMEN gizlemiyoruz -- "Ayarlar" icinde gercek, calisan bir
+   Acik/Koyu/Sistem tema anahtari var (canli arayuzde tiklanarak dogrulandi);
+   footer'i gizlemek bu anahtara erisimi de kaldirirdi. Sadece sessizce
+   kucultup rengini sakinlestiriyoruz. */
+footer { font-size: 0.78rem !important; opacity: 0.6; }
+footer a, footer button { color: var(--at-ink-muted) !important; }
 """
+
+_ICON_UPLOAD = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+</svg>"""
+
+_ICON_CAMERA = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/>
+  <circle cx="12" cy="12.5" r="3.3"/>
+</svg>"""
+
+_ICON_BROADCAST = """<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+  <path d="M8.5 15.5a5 5 0 0 1 0-7"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>
+  <path d="M5.5 18.5a9.5 9.5 0 0 1 0-13"/><path d="M18.5 5.5a9.5 9.5 0 0 1 0 13"/>
+</svg>"""
+
+
+def _tab_intro(icon_svg: str, text: str) -> str:
+    return f'<div class="at-icon-row">{icon_svg}<p>{text}</p></div>'
+
 
 HEADER_HTML = """
 <div id="at-header">
@@ -308,6 +431,7 @@ with gr.Blocks(title="AutoTrack") as demo:
 
     with gr.Tabs():
         with gr.Tab("Video yukle"):
+            gr.HTML(_tab_intro(_ICON_UPLOAD, "Bir video dosyasi yukleyin -- tum boru hatti (tespit + takip + Re-ID + oncelik) uzerinde calisir."))
             with gr.Row(equal_height=True):
                 video_in = gr.Video(label="Kaynak video", height=340)
                 video_out = gr.Video(label="Islenmis cikti", interactive=False, height=340)
@@ -331,7 +455,7 @@ with gr.Blocks(title="AutoTrack") as demo:
             )
 
         with gr.Tab("PC kamerasi"):
-            gr.Markdown("Tarayici kamera izni isteyecek. Her kare geldigi anda canli islenir.")
+            gr.HTML(_tab_intro(_ICON_CAMERA, "Tarayici kamera izni isteyecek. Her kare geldigi anda canli islenir."))
             webcam_classes = _class_picker("webcam-classes")
             with gr.Row(equal_height=True):
                 webcam_in = gr.Image(sources=["webcam"], streaming=True, label="Kamera", height=380)
@@ -347,11 +471,12 @@ with gr.Blocks(title="AutoTrack") as demo:
             webcam_reset_btn.click(fn=reset_webcam_state, outputs=webcam_state)
 
         with gr.Tab("IP kamera"):
-            gr.Markdown(
-                "Sunucu tarafinda bir RTSP/HTTP akisina dogrudan baglanir (tarayici "
-                "kamera izni GEREKMEZ). Ornek: `rtsp://kullanici:sifre@192.168.1.50:554/stream1` "
-                "veya bir telefon IP-kamera uygulamasinin verdigi `http://192.168.1.60:8080/video`."
-            )
+            gr.HTML(_tab_intro(
+                _ICON_BROADCAST,
+                "Sunucu tarafinda bir RTSP/HTTP akisina dogrudan baglanir (tarayici kamera izni "
+                "GEREKMEZ). Ornek: <code>rtsp://kullanici:sifre@192.168.1.50:554/stream1</code> "
+                "veya bir telefon IP-kamera uygulamasinin verdigi <code>http://192.168.1.60:8080/video</code>.",
+            ))
             with gr.Row(equal_height=False):
                 with gr.Column(scale=1):
                     ip_url = gr.Textbox(label="Akis URL'si", placeholder="rtsp://...")

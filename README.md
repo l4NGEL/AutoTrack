@@ -123,7 +123,11 @@ python interface/app.py
 
 `http://127.0.0.1:7860` adresinde üç modlu bir web arayüzü açılır -- üçü de
 `interface/pipeline.py` üzerinden **aynı** tespit+takip+Re-ID+öncelik
-motorunu kullanır, `main.py`'nin kendisine hiç dokunmadan:
+motorunu kullanır, `main.py`'nin kendisine hiç dokunmadan. Görsel kimlik
+([design-system/autotrack/MASTER.md](design-system/autotrack/MASTER.md))
+`ui-ux-pro-max` skill'i ile üretilip bu projenin gerçek ürününe göre elle
+düzeltildi -- renk kontrastları, odak halkaları ve responsive davranış
+canlı sayfada ölçülerek doğrulandı, sadece varsayılmadı.
 
 | Sekme | Ne yapar |
 |---|---|
