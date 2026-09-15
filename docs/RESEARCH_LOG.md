@@ -1064,6 +1064,90 @@ YOLO'yu (veya hazir bir VisDrone-egitilmis checkpoint) fine-tune etmeden,
 bu veri kumesinde anlamli bir MOT16/olcum yapilamaz -- karar
 kullaniciya ait.
 
+## Faz 4.1 — VisDrone fine-tune: tespit gercekten iyilesti, ama tek sahnede ve yeni bir bedelle (2026-09-15)
+
+Faz 4.0'in "sonraki adim" olarak birakip UYGULAMADIGI seyi bu faz yapti:
+yolov8n.pt, VisDrone'un KENDI egitim verisiyle fine-tune edildi -- Faz 4.0'in
+degerlendirme sahnelerine (`uav0000137_00458_v`, `uav0000305_00000_v`)
+KESINLIKLE dokunulmadan.
+
+**Sizinti onlemi (Faz 2.3'un MOT17-09/11-vs-02/04 ayrimiyla ayni disiplin):**
+egitim icin 2 YENI sahne indirildi -- `uav0000086_00000_v` (yuksek yogunluk,
+464 kare, 1344x756px) ve `uav0000339_00001_v` (dusuk yogunluk,
+275 kare, 1904x1071px), toplam 739 kare / **125.5MB** (onceden tahmin edilen
+~800MB'den kucuk cikti). `evaluation/compare_finetune_vs_baseline.py`
+egitim/degerlendirme kumeleri arasinda kesisim olmadigini HER CALISTIGINDA
+programatik olarak dogruluyor, sadece iddia etmiyor.
+
+**Veri hazirligi (`evaluation/prepare_yolo_finetune_data.py`):** VisDrone'un
+MOT-tarzi gt.txt'i Ultralytics YOLO tespit formatina cevrildi -- 629 egitim
++ 110 dogrulama karesi, her sahnenin kendi ZAMAN EKSENINDE (rastgele degil)
+bolundu (ardisik kareler neredeyse ozdes oldugu icin rastgele bolme sizinti
+yaratirdi). Donusum, gercek bir karede kutulari elle cizip goz ile
+dogrulandi (Faz 2'nin egitim/dogrulama disipliniyle ayni ruhta).
+
+**Fine-tune (`evaluation/finetune_yolo_visdrone.py`):** COCO agirliklarindan
+DEVAM (sifirdan degil), imgsz=1280 (640 DEGIL -- Faz 4.0'in kok nedeni tam
+olarak "insanlar cok kucuk" oldugu icin kucultmemek), dusuk lr0, 30 epoch,
+patience=10. **Bir gercek, ortam-kaynakli hata bulunup duzeltildi:**
+Ultralytics'in otomatik MLflow entegrasyonu (bu makinede baska bir proje --
+muhtemelen Baykar NLP RAG/QLoRA/DPO calismasi -- icin acikken) kurulu mlflow
+surumunun dosya-sistemi izlemeyi artik reddetmesiyle CRASH oluyordu; global
+Ultralytics ayarina DOKUNULMADAN (diger projeyi etkilemesin diye), sadece bu
+surece ozel bir ortam degiskeniyle (`MLFLOW_ALLOW_FILE_STORE`) asildi.
+Egitim 20 dakikada tamamlandi (30 epoch, RTX 2080) -- kendi dogrulama
+setinde (ayni 2 egitim sahnesinin gormedigi son %15'i) mAP50=%86.2,
+recall=%80.1.
+
+**Asil test -- DOKUNULMAMIS 2 degerlendirme sahnesi, `evaluation/
+compare_finetune_vs_baseline.py`:**
+
+| Sahne | Config | GT-miss% | Recall@IoU0.5 | Ham tespit | MOTA | IDF1 | IDSW | FP | FN | Det.FPS |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| uav0000137_00458_v (yuksek yogunluk) | baseline | %84.9 | %15.1 | 1680 | -0.074 | 0.114 | 15 | 1416 | 8377 | 14.2 |
+| uav0000137_00458_v | **fine-tuned** | **%31.1** | **%68.9** | 10427 | -0.253 | 0.401 | **300** | 8215 | 2925 | 10.3 |
+| uav0000305_00000_v (dusuk yogunluk) | baseline | %100.0 | %0.0 | 1 | 0.000 | 0.000 | 0 | 0 | 602 | 28.0 |
+| uav0000305_00000_v | fine-tuned | %99.8 | %0.2 | 328 | -2.452 | 0.000 | 0 | 1476 | 602 | 23.9 |
+
+(Baseline satirlari Faz 4.0'in kayitli sayilariyla BIREBIR eslesiyor --
+MOTA=-%7.4/IDF1=%11.4/FP=1416/FN=8377 -- bu, yeni script'in Faz 4.0'in
+metodolojisini dogru tekrarladiginin bagimsiz bir dogrulamasi.)
+
+**Sonuc, tek yonlu bir zafer DEGIL -- durustce iki parcali:**
+
+1. **Yuksek yogunluklu sahnede tespit katmaninda GERCEK, BUYUK bir
+   iyilesme:** recall@IoU0.5 %15.1 -> **%68.9** (GT-miss %84.9 -> %31.1).
+   Faz 4.0'in "COCO agirliklari bu olcekte insan hic gormuyor" bulgusuna
+   DOGRUDAN cevap -- fine-tune gercekten calisiyor, en azindan tespit
+   katmaninda, en azindan bu sahnede.
+2. **Ama dusuk yogunluklu sahnede NEREDEYSE HIC iyilesme yok** (recall
+   %0.0 -> %0.2, 601/602 GT hala kayip) -- fine-tune bu ikinci sahnenin
+   kosullarina (muhtemelen farkli irtifa/doku/arkaplan) genellemedi.
+3. **Ve yuksek yogunluklu sahnede MOTA/ID-switch KOTULESTI** (IDSW 15 ->
+   **300**, FP 1416 -> 8215, MOTA -%7.4 -> -%25.3): fine-tune edilmis
+   model COK DAHA FAZLA ham tespit uretiyor (1680 -> 10427) ve bunlarin
+   onemli bir kismi gurultu -- asil COCO-egitimli model icin kalibre
+   edilmis `conf_threshold=0.35` sabiti, fine-tune edilmis modelin farkli
+   guven dagilimina artik uymuyor olabilir (test EDILMEDI, sadece en
+   olasi aciklama). Yani "tespit katmani" duzeldi ama "takip katmani"
+   simdi farkli, yeni bir sorunla karsi karsiya.
+4. **Dusuk yogunluklu sahnede de FP'ler arttigi halde (0 -> 1476) recall
+   HALA sifira yakin** -- fine-tune edilmis model bu sahnede gercek
+   insanlari degil, baska bir seyi (gurultu/yanlis pozitif) tespit etmeye
+   basliyor. Kok nedeni bu oturumda arastirilmadi.
+
+**Anlami:** Faz 4.0'in "detector calismiyor" bulgusu artik kismi olarak
+duzeltildi (bir sahnede kanitlanmis, buyuk bir tespit-recall kazanci var),
+ama bu hem sahneye-ozel/genellemeyen hem de tracker'da yeni bir maliyetle
+geliyor. **"Fine-tune ettik, sorun cozuldu" demek durust olmaz** -- durust
+olan: "tespit katmaninda gercek ilerleme var, ama (a) genelleme sinirli,
+(b) conf_threshold'un fine-tune edilmis modele gore yeniden ayarlanmasi
+gerekiyor (Faz 3.0'in orijinal YOLO icin yaptigi sweep'in fine-tune edilmis
+model icin bir benzeri, bu oturumda UYGULANMADI, acik bir sonraki adim)."
+
+13 yeni birim test (`_write_yolo_label`, `_read_gt_by_frame`,
+`_read_seqinfo_size`, `_count_gt_misses`, `confirm_no_leakage`). 157 test yesil.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1202,9 +1286,20 @@ kullaniciya ait.
       CEVAPLANAMADI -- tespit calismadan takip katmani olculemez. Sonraki
       adim (VisDrone-egitilmis detector) kullanicinin kararini bekliyor.
       Bkz. "Faz 4.0"
-- [ ] Faz 4.1 (gercek-zamanli/gomulu) ve Faz 4.2 (coklu kamera) -- Faz 4.0
-      sonucuna gore ERTELENDI: detector calismadan bu ikisinin tasarimi
-      anlamli sekillenemez (bkz. onaylanmis plan, "Faz 4.0" bolumu)
+- [x] **Faz 4.1:** VisDrone'un kendi egitim verisiyle YOLO fine-tune --
+      DOKUNULMAMIS 2 degerlendirme sahnesinde tekrar test edildi (sizinti
+      yok, programatik dogrulandi). **Yuksek yogunluklu sahnede recall@IoU0.5
+      %15.1->%68.9 (gercek, buyuk kazanc)**, ama dusuk yogunluklu sahnede
+      neredeyse hic iyilesme yok (%0.0->%0.2) VE yuksek yogunluklu sahnede
+      ID-switch 15->300'e firladi (fine-tune edilmis model icin
+      conf_threshold=0.35 artik kalibre degil, test edilmedi). Tek yonlu
+      zafer degil -- tespit katmaninda kismi, sahneye-ozel bir ilerleme.
+      Bkz. "Faz 4.1"
+- [ ] Faz 4.1'in actigi soru: fine-tune edilmis model icin conf_threshold
+      sweep'i (Faz 3.0'in orijinali gibi) -- ID-switch patlamasini
+      duzeltebilir mi, test edilmedi
+- [ ] Faz 4.2 (gercek-zamanli/gomulu) ve Faz 4.3 (coklu kamera) -- Faz 4.0/4.1
+      sonucuna gore hala ERTELENMIS durumda (bkz. onaylanmis plan)
 
 ## Demo video
 

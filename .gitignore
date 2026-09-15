@@ -33,3 +33,8 @@ data/VisDrone/
 
 # Arayuz (interface/app.py): yuklenen videolarin islenmis ciktilari, calistirma-zamaninda uretilir
 interface/_runs/
+
+# Faz 4.1: fine-tune icin uretilen YOLO egitim formati (prepare_yolo_finetune_data.py
+# ile data/VisDrone'dan yeniden uretilebilir) + Ultralytics'in yerel MLflow izleme klasoru
+data/visdrone_yolo_finetune/
+runs/

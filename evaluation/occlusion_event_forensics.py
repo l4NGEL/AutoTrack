@@ -137,8 +137,8 @@ def classify_event(reason_before, reason_after, before_hyp, after_hyp) -> str:
     return "UNKNOWN"  # tutarsizlik -- manuel incelenmeli
 
 
-def _collect_baseline_hyp(seq_dir: Path, fps: float) -> dict:
-    detector = YoloDetector(weights="yolov8n.pt", conf_threshold=BASELINE_CONF, classes=[0])
+def _collect_baseline_hyp(seq_dir: Path, fps: float, weights: str = "yolov8n.pt") -> dict:
+    detector = YoloDetector(weights=weights, conf_threshold=BASELINE_CONF, classes=[0])
     checkpoint_path = str(DEFAULT_CHECKPOINT) if DEFAULT_CHECKPOINT.is_file() else None
     extractor = OSNetFeatureExtractor(model_name="osnet_x1_0", checkpoint_path=checkpoint_path)
     tracker = AdaptiveTracker(weight_mode="adaptive", base_weights=(0.4, 0.3, 0.3), fps=fps)  # track_thresh VARSAYILAN

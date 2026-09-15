@@ -30,15 +30,18 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   sıçramalar), fps-körlüğü (bir sekansta MOTA -%10.6'ya çöküyordu),
   NumPy 2.0/PyTorch 2.6 uyumluluk kırılmaları, ve arka-plan analiz
   araçlarının kendisinde bulunan 3 ayrı sınıflandırma hatası.
-- **127 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
+- **157 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
   kilitlendi.
 - **Kapsam genişletme testi de aynı disiplinle:** "drone kamerası" senaryosu
   VisDrone-MOT ile ilk kez gerçek veride sınandı -- sonuç "iyi çalışıyor"
   değil, **detector'un COCO-eğitimli ağırlıklarla bu ölçekte "person"
   sınıfını hiç tespit edemediği**, kök nedeniyle (ham YOLO çıktısı
-  incelenerek) doğrulandı. Sonuç olumsuz çıkınca pahalı takip-analizi
-  scriptleri BİLİNÇLİ OLARAK çalıştırılmadı -- yanlış katmanda zaman
-  harcamamak için.
+  incelenerek) doğrulandı (Faz 4.0). Ardından VisDrone'un kendi verisiyle
+  fine-tune edilip **dokunulmamış** değerlendirme sahnelerinde tekrar
+  test edildi (Faz 4.1): bir sahnede recall %15.1→%68.9 -- gerçek bir
+  kazanç -- ama diğer sahnede yok denecek kadar az, ve ID-switch 15'ten
+  300'e fırladı. Tek yönlü bir "çözüldü" hikâyesi değil, kısmi ve
+  sahneye-özel bir ilerleme olarak raporlandı.
 
 Bu araştırmanın tam, kronolojik dökümü (her fazın gerçek sayıları, kod
 referansları ve dürüst sınırlamalarıyla) [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
@@ -208,7 +211,9 @@ Tam derivasyon, ara-adımlar ve her tablonun nasıl üretildiği için
 | Occlusion Recovery Rate (ölçülebilir tek sekans, MOT17-05) | %40.0–45.5 |
 | Kalabalık yoğunluğu ↔ ORR sınır-hatası korelasyonu (7 sekans) | r = 0.892 |
 | Kalabalık yoğunluğu ↔ kısmi-görünürlük hata sıklığı (7 sekans) | r = 0.935 |
-| VisDrone (havadan görüntü) genelleme testi | Detector seviyesinde başarısız, kök nedeniyle doğrulandı |
+| Tracker-tarafı müdahaleler (ReID skoru, mesafe sınırı, confidence eşiği) | Üçü de test edildi, üçü de negatif -- bkz. Faz 3.0/3.4/3.5 |
+| VisDrone (havadan görüntü), COCO-eğitimli detector | Detector seviyesinde başarısız, kök nedeniyle doğrulandı (Faz 4.0) |
+| VisDrone, kendi verisiyle fine-tune sonrası, dokunulmamış sahnede | Recall@IoU0.5 %15.1→%68.9 (1 sahnede) ama diğer sahnede yok denecek kadar az (%0.0→%0.2), ID-switch 15→300'e çıktı (Faz 4.1) |
 | Uçtan uca hız (RTX 2080, MOT17-04 demo klibi) | ~9-11 FPS -- gerçek zamanlı değil |
 
 ## Bilinen sınırlamalar
@@ -220,9 +225,12 @@ her negatif sonuç. Öne çıkanlar:
   gerçek bir kök-neden araştırma metodolojisi sergilemek.
 - ~9-14 FPS (RTX 2080, tek makine ölçümü) -- gerçek zamanlı/gömülü kısıtlar
   için optimize edilmedi.
-- Tüm nicel sonuçlar tek bir veri seti ailesine (MOT17, yer-seviyesi kamera,
-  yaya) dayanıyor; havadan/drone görüntüsünde (VisDrone) mevcut COCO-eğitimli
-  detector bu ölçekte çalışmıyor (bkz. Faz 4.0).
+- Tüm nicel MOT17 sonuçları tek bir veri seti ailesine (yer-seviyesi kamera,
+  yaya) dayanıyor. Havadan/drone görüntüsünde COCO-eğitimli detector bu
+  ölçekte çalışmıyordu (Faz 4.0); VisDrone'un kendi verisiyle fine-tune
+  bunu kısmen düzeltti (bir sahnede recall %15→%69) ama genellemiyor
+  (diğer sahnede ~%0 kaldı) ve tracker tarafında yeni bir ID-switch sorunu
+  açtı -- "çözüldü" değil, "kısmi, sahneye-özel ilerleme" (bkz. Faz 4.1).
 - Çoklu kamera / kameralar-arası (cross-camera) Re-ID henüz yok.
 - Saf Python/PyTorch -- gömülü donanım veya TensorRT/ONNX gibi bir
   hızlandırma katmanı için ayrıca optimize edilmedi.
@@ -243,6 +251,7 @@ benchmark/leaderboard artik kullanmiyor; savunma sektorune yonelik bir
 portfoyde bu tartismali kaynagi atlamak daha temiz. MSMT17 — yazarlardan izin
 basvurusu gerektiriyor, bu projenin kapsaminda degil.
 
-**Faz 4.0'da denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
-açısı) -- COCO-eğitimli detector bu ölçekte çalışmadığı için sonuç olumsuz
-çıktı, detaylar [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
+**Faz 4.0/4.1'de denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
+açısı) -- COCO-eğitimli detector bu ölçekte çalışmadı (Faz 4.0); kendi
+verisiyle fine-tune kısmen düzeltti, tam genellemedi (Faz 4.1). Detaylar
+[docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.

@@ -20,6 +20,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sequence", required=True, help="Virgulle ayrilmis sekans adi/adlari")
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    parser.add_argument("--weights", default="yolov8n.pt",
+                         help="Faz 4.1: fine-tune edilmis bir checkpoint'i baseline'a karsi kiyaslamak icin")
     args = parser.parse_args()
 
     rows = []
@@ -27,9 +29,9 @@ def main():
         seq_dir = args.data_dir / seq
         gt_by_frame = load_mot_gt(seq_dir / "gt" / "gt.txt")
         seq_fps = read_seq_fps(seq_dir)
-        print(f"\n=== {seq} ({seq_fps:.0f} FPS, conf={BASELINE_CONF}, track_thresh=0.5 varsayilan) ===")
+        print(f"\n=== {seq} ({seq_fps:.0f} FPS, conf={BASELINE_CONF}, track_thresh=0.5 varsayilan, weights={args.weights}) ===")
 
-        hyp_by_frame_xyxy = _collect_baseline_hyp(seq_dir, seq_fps)
+        hyp_by_frame_xyxy = _collect_baseline_hyp(seq_dir, seq_fps, weights=args.weights)
         hyp_by_frame_xywh = {
             f: [(tid, xyxy_to_xywh(tuple(box))) for tid, box in fr_rows] for f, fr_rows in hyp_by_frame_xyxy.items()
         }
