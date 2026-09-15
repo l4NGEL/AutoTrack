@@ -964,6 +964,41 @@ kapisi) baska yerde. Bu, kullanicinin sordugu "denemeye deger mi"
 sorusunu net bir "hayir, bu haliyle degil" ile cevapliyor -- ve bunu
 gercek koda dokunmadan, ucuz bir prototiple ogrenmis olduk.
 
+## Faz 3.5 — mesafe siniri de darbogaz DEGIL: tracker-tarafi mudahaleler tukendi (2026-09-15)
+
+Faz 3.4'un actik biraktigi soru -- "_reid_score degistirmenin sifir etkisi,
+max_dist mesafe sinirinin adaylari ReID hesaplanmadan once elemesinden mi
+kaynaklaniyor?" -- bu oturumda DOGRUDAN test edildi (Faz 3.4'te sadece bir
+cikarimdi, ayrica dogrulanmamisti).
+
+`evaluation/test_distance_gate_hypothesis.py`: ayni 38 MOT17-04 partial-
+visibility episode'u, `association_dist_ratio` icin iki degerle yeniden
+siniflandirildi -- 0.08 (guncel, Faz 2.4'un sikilastirdigi) ve 0.15
+(Faz 2.4 ONCESI, Faz 2.1'in ilk koydugu sinir). `tracking/adaptive_tracker.py`'ye
+HICBIR DOKUNUS yok, parametre zaten disaridan geciriliyordu.
+
+**Sonuc: 0/38 episode outcome degisti.** Hicbiri -- P2/P4 (teorik olarak
+mesafe-sinirindan kurtarilabilir sayilan 12 episode) dahil. Faz 3.4'un
+ReID-skoru degisikligiyle (bit-bit sifir) tam olarak ayni kesinlikte bir
+negatif sonuc.
+
+**Ustune, riskli taraf da dogrulandi:** 0.15'e genisletmek sekanstaki en
+buyuk ardisik-kare merkez sicramasini 78px'ten **307px'e** cikardi (track
+21, kare 478) -- Faz 2.4'un duzelttigi turden (309px, gercek dogrulanmis
+bir yanlis-birlestirme) bir sicrama yeniden ortaya cikti. Yani 0.15 hem
+hicbir episode'u kurtarmiyor hem de bilinen bir hata sinifini geri
+getiriyor -- bu oturumun en net "hayir" sonuclarindan biri, cift yonlu.
+
+**Anlami:** tracker-tarafi mudahaleler artik ucu de test edildi ve ucu de
+negatif -- ReID skoru (Faz 3.4), mesafe siniri (bu faz), confidence esigi
+(Faz 3.0, farkli bir bulgu icin ama ayni sonuc: hicbir sey degismedi).
+Partial-visibility episode'lerinin geri kalaninda (agirlikli olarak
+P1_NO_DETECTION) gercek darbogaz artik buyuk olasilikla saf detection
+recall/lokalizasyon -- tracker'in kendi mantigiyla duzeltilebilecek bir
+sey degil. 5 yeni birim test (`_max_consecutive_jump` -- Faz 2.4/2.6'nin
+o zaman tek seferlik/tests-disi olan sicrama taramasinin artik tekrar
+kullanilabilir hali). 144 test yesil.
+
 ## Faz 4.0 — Hava/Drone Genelleme Doğrulaması: detector'un kendisi çöktü (2026-09-05)
 
 Kullanıcının "kapsamı genişletelim" isteğiyle -- README'nin en basindan
@@ -1147,9 +1182,13 @@ kullaniciya ait.
       olmamasi mesafe sinirinin (`max_dist`) darbogaz olabilecegini
       dusunduruyor (test EDILMEDI, sadece cikarim). Bu fikir AutoTrack'e
       TASINMAYA DEGER DEGIL. Bkz. "Faz 3.4"
-- [ ] Faz 3.3/3.4'un actigi soru: partial-visibility rejiminde mesafe
-      siniri (`max_dist`) gercekten darbogaz mi -- test edilmedi; asil
-      darbogaz muhtemelen detection recall (P1, bkz. Faz 3.0/3.3)
+- [x] **Faz 3.5:** Faz 3.3/3.4'un actigi soru test edildi -- mesafe siniri
+      (`max_dist`) partial-visibility darbogazi DEGIL: 0.08->0.15 genisletmek
+      **0/38 episode'u degistirmedi**, ustune en buyuk ardisik-kare sicramayi
+      78px->307px'e cikarip Faz 2.4'un duzelttigi turden bir hatayi geri
+      getirdi. Tracker-tarafi mudahaleler (ReID skoru + mesafe siniri +
+      confidence esigi) ucu de test edildi, ucu de negatif -- darbogaz
+      buyuk olasilikla saf detection recall. Bkz. "Faz 3.5"
 - [ ] Adaptif esiklerin validation split'e karsi ayarlanmasi, 7 sekansin
       tumunde (egitim/degerlendirme ayrimini koruyarak) tekrar
 - [x] Demo video — MOT17-04 uzerinde, Faz 2 checkpoint'iyle, bkz. asagida
