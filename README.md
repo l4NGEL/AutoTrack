@@ -30,7 +30,7 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   sıçramalar), fps-körlüğü (bir sekansta MOTA -%10.6'ya çöküyordu),
   NumPy 2.0/PyTorch 2.6 uyumluluk kırılmaları, ve arka-plan analiz
   araçlarının kendisinde bulunan 3 ayrı sınıflandırma hatası.
-- **171 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
+- **188 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
   kilitlendi.
 - **Kapsam genişletme testi de aynı disiplinle:** "drone kamerası" senaryosu
   VisDrone-MOT ile ilk kez gerçek veride sınandı -- sonuç "iyi çalışıyor"
@@ -48,6 +48,15 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   aslında etkin conf≈0.50 ölçüyordu). Doğru confidence (0.55) ile MOTA
   -%25.3→-%13.4, IDF1 0.401→0.439 -- ama düşük yoğunluklu sahne hiçbir
   parametreyle düzelmedi, dürüstçe "çözümsüz" olarak raporlandı.
+- **Faz 4.3, Faz 4.2'nin kendi kesif-niteliğindeki metodoloji sınırını
+  düzeltti:** gerçek bir train/validation/test ayrımı (3 YENİ, hiç
+  görülmemiş VisDrone sahnesi validasyon kümesi olarak), parametre seçimi
+  test sahnelerine hiç bakmadan yapıldı. Sonuç dürüstçe karışık: validasyonda
+  seçilen konfigürasyon final test sahnelerinde Faz 4.2'nin kesif-seçiminden
+  **daha kötü** çıktı -- daha sağlam metodoloji otomatik olarak daha iyi
+  sonuç garantilemedi. 3 validasyon sahnesi de birbirinden çok farklı
+  davrandı, biri bu projede ilk kez görülen katastrofik bir false-positive
+  modu (MOTA -4.6) sergiledi. İki-üç sahneden genelleme iddiası yapılmadı.
 
 Bu araştırmanın tam, kronolojik dökümü (her fazın gerçek sayıları, kod
 referansları ve dürüst sınırlamalarıyla) [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
@@ -221,6 +230,7 @@ Tam derivasyon, ara-adımlar ve her tablonun nasıl üretildiği için
 | VisDrone (havadan görüntü), COCO-eğitimli detector | Detector seviyesinde başarısız, kök nedeniyle doğrulandı (Faz 4.0) |
 | VisDrone, kendi verisiyle fine-tune sonrası, dokunulmamış sahnede | Recall@IoU0.5 %15.1→%68.9 (1 sahnede) ama diğer sahnede yok denecek kadar az (%0.0→%0.2), ID-switch 15→300'e çıktı (Faz 4.1) |
 | VisDrone, aynı sahnede uçtan uca confidence+tracker sweep sonrası | MOTA -%25.3→-%13.4, IDF1 0.401→0.439 (doğru conf=0.55 ile); düşük yoğunluklu sahne hiçbir parametreyle düzelmedi (Faz 4.2) |
+| VisDrone, 3 YENİ validasyon sahnesinde (gerçek train/val/test ayrımı) | Validasyon-seçimli konfigürasyon final testte Faz 4.2'nin kesif-seçiminden DAHA KÖTÜ çıktı; 1 sahne ilk kez görülen katastrofik FP modu (MOTA -4.6) sergiledi (Faz 4.3) |
 | Uçtan uca hız (RTX 2080, MOT17-04 demo klibi) | ~9-11 FPS -- gerçek zamanlı değil |
 
 ## Bilinen sınırlamalar
@@ -242,7 +252,14 @@ her negatif sonuç. Öne çıkanlar:
   düzeltti (doğru conf ile MOTA -%25.3→-%13.4) ama düşük yoğunluklu sahneyi
   hiç düzeltemedi -- ayrıca bu sweep de AYNI 2 dokunulmamış sahne üzerinde
   parametre seçtiği için sonuç kesif niteliğinde, bağımsız bir doğrulama
-  kümesiyle henüz teyit edilmedi (bkz. Faz 4.2).
+  kümesiyle henüz teyit edilmedi (bkz. Faz 4.2). Faz 4.3 bunu gerçek bir
+  train/validation/test ayrımıyla test etti: 3 YENİ validasyon sahnesi
+  indirildi, parametre seçimi test sahnelerine hiç bakmadan yapıldı --
+  sonuç dürüstçe karışık, validasyon-seçimli konfigürasyon final testte
+  Faz 4.2'nin kesif-seçiminden DAHA KÖTÜ çıktı (daha sağlam metodoloji
+  otomatik olarak daha iyi sonuç garantilemiyor), ve 3. bir sahne bu
+  projede ilk kez görülen katastrofik bir false-positive modu sergiledi,
+  kök nedeni henüz bilinmiyor (bkz. Faz 4.3).
 - Çoklu kamera / kameralar-arası (cross-camera) Re-ID henüz yok.
 - Saf Python/PyTorch -- gömülü donanım veya TensorRT/ONNX gibi bir
   hızlandırma katmanı için ayrıca optimize edilmedi.
@@ -263,8 +280,10 @@ benchmark/leaderboard artik kullanmiyor; savunma sektorune yonelik bir
 portfoyde bu tartismali kaynagi atlamak daha temiz. MSMT17 — yazarlardan izin
 basvurusu gerektiriyor, bu projenin kapsaminda degil.
 
-**Faz 4.0/4.1/4.2'de denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
+**Faz 4.0/4.1/4.2/4.3'te denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
 açısı) -- COCO-eğitimli detector bu ölçekte çalışmadı (Faz 4.0); kendi
 verisiyle fine-tune kısmen düzeltti, tam genellemedi (Faz 4.1); uçtan uca
-confidence+tracker sweep'i bunun üzerine kısmen daha iyileştirdi (Faz 4.2).
-Detaylar [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
+confidence+tracker sweep'i bunun üzerine kısmen daha iyileştirdi (Faz 4.2);
+gerçek bir train/validation/test ayrımıyla test edildiğinde bu iyileştirme
+final test sahnelerinde tutmadı, ve 3. bir sahne yeni bir başarısızlık modu
+ortaya çıkardı (Faz 4.3). Detaylar [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.

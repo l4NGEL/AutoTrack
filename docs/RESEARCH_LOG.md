@@ -1211,6 +1211,61 @@ yeni veri indirmesi ayri kullanici onayi gerektiriyor.
 `_assoc_grid`). 171 test yesil. Tam tablolar ve Pareto analizi:
 `experiments/PHASE_4_2_REPORT.md`.
 
+## Faz 4.3 — Dogrulama ve genelleme: gercek train/validation/test ayrimi, ve durust bir "daha iyi metodoloji daha iyi sonuc garanti etmez" bulgusu (2026-09-21)
+
+Faz 4.2 kendi raporunda acikca belirtmisti: parametre secimi (conf+tracker
+sweep) Faz 4.0'in AYNI 2 "dokunulmamis" sahnesinde yapilmisti -- bu bir
+dogrulama degil, kesif niteliginde bir hassasiyet analiziydi. Bu faz gercek
+bir uc-yollu ayrim kurdu: `evaluation/validate_finetuned_generalization.py`,
+VisDrone'un metadata'si zaten kayitli ama piksel dosyalari HENUZ
+indirilmemis 3 sahnesini (`uav0000117_02622_v`, `uav0000182_00000_v`,
+`uav0000268_05773_v` -- 1690 kare, `Voxel51/visdrone-mot`'tan, kalici hale
+getirilen `evaluation.download_datasets.download_visdrone_scenes()` ile)
+YENI bir VALIDATION kumesi yapti. `confirm_no_leakage_3way()` train/val/test
+ucunun ikili kesisimlerinin tamaminin bos oldugunu programatik dogruladi.
+
+**Disiplin:** 10 aday konfigurasyon (Faz 4.2'nin IDF1/MOTA/IDSW-optimum
+adaylari + fine-tuned varsayilan + 6 degerlik bir confidence sweep, hepsi
+AdaptiveTracker'in gercek constructor varsayilanlarindan/Faz 4.2'nin
+raporundan, TAHMIN EDILMEDI) SADECE validasyon sahnelerinde calistirildi;
+`select_locked_config()` her satirin validasyon-kokenli oldugunu ve hicbir
+satirin test-sahnesi verisi icermedigini calisma-zamaninda dogruluyor
+(aksi halde `SystemExit`) -- final test kodu secim TAMAMEN kilitlendikten
+SONRA calisiyor.
+
+**Validasyon sonucu -- Pareto cephesi TUM 10 adayi kapsiyor**, yani tek bir
+"objektif olarak en iyi" konfigurasyon yok. IDF1'e gore en iyi (kullanicinin
+belirttigi PRIMARY metrik, conf=0.45) razor-thin bir farkla kazandi
+(0.116 vs fine-tuned-varsayilanin 0.115) ama aggregate'teki EN KOTU MOTA'yi
+(-0.718) VE EN YUKSEK FP'yi (11535) de tasiyordu -- metrikler GUCLU sekilde
+anlasmazlik halindeydi, bu saklanmadi.
+
+**Sahne bazinda, aggregate'in gizleyecegi 3. bir basarisizlik modu bulundu:**
+`uav0000117_02622_v` kismen calisti (Faz 4.0'in yuksek-yogunluk bulgusuna
+benzer); `uav0000268_05773_v` Faz 4.0'dan beri bilinen sifir-recall
+basarisizligini AYNEN tekrarladi (5 konfigurasyonun TUMUNDE tp=0); ama
+`uav0000182_00000_v` bu projede ILK KEZ gorulen bir sey yapti -- MOTA
+-4.62'ye kadar dustu, false positive sayisi true positive'in 8 katina
+cikti. Bu ucuncu basarisizlik modu (katastrofik FP, dusuk-recall'den
+FARKLI) kok nedeniyle arastirilmadi, sonraki adim olarak birakildi.
+
+**En onemli, durustce raporlanmis bulgu:** validasyon-secimli konfigurasyon
+(conf=0.45) final test sahnelerinde Faz 4.2'nin kesif-secimine (conf=0.55)
+gore DAHA KOTU cikti -- yuksek yogunluklu sahnede MOTA -0.134'ten -0.376'ya,
+IDF1 0.439'dan 0.377'ye geriledi (recall 0.590'dan 0.644'e yukseldi, ama FP
+de 6943'ten 9508'e cikti). **Bu bir celiski degil, Faz 4.3'un ne yaptiginin
+dogru bir gostergesi:** amac "daha iyi sonuc" garantilemek degildi, "test
+sahnelerine bakmadan yapilan durust bir secim" saglamakti. Faz 4.2'nin
+sonucu, secim ile degerlendirmenin ayni veri uzerinde yapilmasi yuzunden
+iyimser gorunmus olabilir -- ve 3 validasyon sahnesi kendi icinde bu kadar
+farkli davrandigi icin, henuz guvenilir bir genelleme icin yeterli
+olmayabilir. **Iki (ya da uc) sahneden genellenmis bir basari iddiasi
+yapilmadi** -- kullanicinin acik kurali.
+
+17 yeni birim test (3-yollu sizinti kontrolu, Pareto tespiti, agregasyon
+[naif ortalama DEGIL], kilit secimi + test-sahnesi-sizintisi korumasi).
+188 test yesil. Tam tablolar: `experiments/PHASE_4_3_REPORT.md`.
+
 ## Yol haritasi
 
 - [x] Proje iskeleti
@@ -1365,8 +1420,21 @@ yeni veri indirmesi ayri kullanici onayi gerektiriyor.
       etiketiyle aslinda etkin conf~=0.50 olculdugunu ortaya cikardi (bkz.
       Faz 4.1 bolumundeki duzeltme notu). Dusuk yogunluklu sahne hala
       cozumsuz -- durustce boyle raporlandi. Bkz. "Faz 4.2"
-- [ ] Faz 4.3 (gercek-zamanli/gomulu) ve Faz 4.4 (coklu kamera) -- Faz 4.0/4.1/4.2
-      sonucuna gore hala ERTELENMIS durumda (bkz. onaylanmis plan)
+- [x] **Faz 4.3:** Faz 4.2'nin kesif niteligindeki secimi gercek bir
+      train/validation/test ayriminda (3 YENI validasyon sahnesi) test edildi.
+      **Sonuc karisik, saklanmadi:** validasyonda secilen konfigurasyon (en
+      yuksek IDF1, conf=0.45) final test sahnelerinde Faz 4.2'nin kesif
+      secimine gore MOTA/IDF1'de DAHA KOTU cikti -- yani daha saglam
+      metodoloji, otomatik olarak daha iyi bir sonuc GARANTI ETMEDI. 3
+      validasyon sahnesi de birbirinden cok farkli davrandi: biri kismen
+      calisti, biri katastrofik false-positive modu (MOTA -4.6) gosterdi
+      (bu projede ILK KEZ gorulen bir basarisizlik sinifi), biri Faz
+      4.0'dan beri bilinen sifir-recall sorununu tekrarladi. Bkz. "Faz 4.3"
+- [ ] Faz 4.3'un actigi soru: `uav0000182_00000_v`'nin katastrofik false-
+      positive modunun kok nedeni (Faz 4.0'in yontemiyle ayni ruhta,
+      ham YOLO ciktisi gorsel incelemesi) -- test edilmedi
+- [ ] Faz 4.4 (gercek-zamanli/gomulu) ve Faz 4.5 (coklu kamera) -- Faz
+      4.0/4.1/4.2/4.3 sonucuna gore hala ERTELENMIS durumda (bkz. onaylanmis plan)
 
 ## Demo video
 

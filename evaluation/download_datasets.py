@@ -11,9 +11,22 @@ kopyalarini kullaniyoruz:
     (gt.txt + det.txt + img1/ iceren standart MOT dizin yapisi, 7 sekansin
     tamami mevcut; biz sadece MOT17-02 ve MOT17-04'u indiriyoruz)
 
+VisDrone-MOT (Faz 4.3): Faz 4.0/4.1'in raw-piksel indirmesi bu dosyaya hic
+eklenmemisti (o zamanki oturumda tek seferlik, kayitsiz kod olarak
+calistirilmisti) -- `download_visdrone_scenes()` bunu, `download_mot17()`
+ile AYNI `snapshot_download`+`allow_patterns` deseniyle, kalici/tekrar
+calistirilabilir hale getiriyor. Kaynak: https://huggingface.co/datasets/Voxel51/visdrone-mot
+(FiftyOne-native, `data/visdrone_raw/samples.json` -- 7 sahnenin TAMAMININ
+metadata'si zaten var, ama piksel dosyalari sadece indirilen sahneler icin
+mevcut; `evaluation/visdrone_adapter.py` bu ham pikselleri MOT17-format
+sahne dizinine cevirir, bu dosyanin isi degil).
+
 Kullanim:
     python -m evaluation.download_datasets
+    python -m evaluation.download_datasets --visdrone-scenes uav0000117_02622_v,uav0000182_00000_v,uav0000268_05773_v
 """
+import argparse
+import json
 import tarfile
 from pathlib import Path
 
@@ -26,6 +39,9 @@ MOT17_FINETUNE_SEQUENCES = ["MOT17-09-FRCNN", "MOT17-11-FRCNN"]  # evaluation/fi
 # MOT17'nin FRCNN varyantindaki 7 sekans: 02,04,05,09,10,11,13 -- bunlarin 09/11'i
 # yukarida egitimde kullanildi, o yuzden 7-sekans ablation'inda ayri isaretlenmeli.
 MOT17_EXTRA_EVAL_SEQUENCES = ["MOT17-05-FRCNN", "MOT17-10-FRCNN", "MOT17-13-FRCNN"]
+
+VISDRONE_RAW_DIR = DATA_DIR / "visdrone_raw"
+VISDRONE_REPO_ID = "Voxel51/visdrone-mot"
 
 
 def download_market1501():
@@ -89,9 +105,59 @@ def download_mot17(sequences=MOT17_EVAL_SEQUENCES):
         print(f"[MOT17] {seq}: gt.txt {'var' if gt.is_file() else 'YOK'}, {n_frames} kare")
 
 
+def download_visdrone_scenes(scene_ids: list, raw_dir: Path = VISDRONE_RAW_DIR) -> None:
+    """VisDrone-MOT'un `samples.json`'da metadata'si zaten kayitli ama piksel
+    dosyalari henuz cekilmemis sahnelerini indirir. `samples.json`'daki
+    `filepath` alanlarindan tam dosya listesini cikarip `allow_patterns`
+    olarak verir -- SADECE istenen sahnelerin dosyalari (baska hicbir sahne
+    yanlislikla cekilmez), `download_mot17()` ile ayni "once yerel varligi
+    kontrol et, sonra sadece eksik olani indir" deseni."""
+    samples_json = raw_dir / "samples.json"
+    if not samples_json.is_file():
+        raise FileNotFoundError(
+            f"{samples_json} yok -- VisDrone-MOT'un temel metadata'si (samples.json/"
+            "metadata.json) bu depoda daha once hic indirilmemis. Bu fonksiyon sadece "
+            "EK sahnelerin piksellerini ceker, temel metadata kurulumunu yapmaz."
+        )
+    with open(samples_json, encoding="utf-8") as f:
+        samples = json.load(f)["samples"]
+
+    for scene_id in scene_ids:
+        rows = [s for s in samples if s["scene_id"] == scene_id]
+        if not rows:
+            raise ValueError(f"[visdrone] {scene_id}: samples.json'da bu scene_id yok")
+
+        missing = [s["filepath"] for s in rows if not (raw_dir / s["filepath"]).is_file()]
+        if not missing:
+            print(f"[visdrone] {scene_id}: {len(rows)} kare zaten mevcut")
+            continue
+
+        print(f"[visdrone] {scene_id}: {len(missing)}/{len(rows)} kare indiriliyor "
+              f"({VISDRONE_REPO_ID}'den)...")
+        snapshot_download(
+            repo_id=VISDRONE_REPO_ID,
+            repo_type="dataset",
+            allow_patterns=missing,
+            local_dir=str(raw_dir),
+        )
+
+    for scene_id in scene_ids:
+        rows = [s for s in samples if s["scene_id"] == scene_id]
+        present = sum(1 for s in rows if (raw_dir / s["filepath"]).is_file())
+        print(f"[visdrone] {scene_id}: {present}/{len(rows)} kare diskte")
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--visdrone-scenes", default=None,
+                         help="Virgulle ayrilmis VisDrone scene_id listesi (opsiyonel -- "
+                              "verilmezse davranis degismez, sadece MOT17/Market1501 indirilir)")
+    args = parser.parse_args()
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     download_market1501()
     download_mot17(MOT17_EVAL_SEQUENCES)
     download_mot17(MOT17_FINETUNE_SEQUENCES)
     download_mot17(MOT17_EXTRA_EVAL_SEQUENCES)
+    if args.visdrone_scenes:
+        download_visdrone_scenes(args.visdrone_scenes.split(","))

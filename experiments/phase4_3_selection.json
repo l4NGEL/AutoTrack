@@ -1,0 +1,25 @@
+{
+  "best_idf1": "sweep_conf_0.45",
+  "best_mota": "C_idsw_optimum_4_2",
+  "lowest_idsw": "C_idsw_optimum_4_2",
+  "best_recall": "D_finetuned_default",
+  "pareto_set": [
+    "A_idf1_optimum_4_2",
+    "B_mota_optimum_4_2",
+    "C_idsw_optimum_4_2",
+    "D_finetuned_default",
+    "sweep_conf_0.45",
+    "sweep_conf_0.50",
+    "sweep_conf_0.55",
+    "sweep_conf_0.60",
+    "sweep_conf_0.65",
+    "sweep_conf_0.70"
+  ],
+  "locked_candidate": "sweep_conf_0.45",
+  "locked_params": {
+    "conf": 0.45,
+    "assoc_dist_ratio": 0.08,
+    "match_thresh": 0.3,
+    "track_thresh": 0.0
+  }
+}

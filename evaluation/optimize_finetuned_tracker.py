@@ -151,9 +151,18 @@ def prf1(tp: int, fp: int, fn: int) -> tuple:
 
 
 def run_one_config(per_frame_dets_embs, gt_by_frame, fps, conf, assoc_dist_ratio, match_thresh,
-                    track_thresh=CURRENT_TRACK_THRESH_FOR_SWEEP, dummy_frame=None) -> dict:
+                    track_thresh=CURRENT_TRACK_THRESH_FOR_SWEEP, dummy_frame=None,
+                    return_accumulator: bool = False):
     """Onceden cikarilmis (tespit,embedding) cifti uzerinde -- SIFIR ek GPU
-    maliyetiyle -- TEK bir (conf, association) konfigurasyonunu calistirir."""
+    maliyetiyle -- TEK bir (conf, association) konfigurasyonunu calistirir.
+
+    `return_accumulator=True` (varsayilan DEGIL, geriye-uyumlu): sonuc
+    dict'ine ek olarak ham `mm.MOTAccumulator`'i da doner -- Faz 4.3'un
+    coklu-sahne validasyon agregasyonu icin (`mot_metrics.summarize()`'a
+    birden fazla sahnenin accumulator'ini birlikte vererek `generate_overall`
+    ile ISTATISTIKSEL OLARAK DOGRU agregasyon, sahne-yuzdelerinin ortalamasi
+    DEGIL). Varsayilan False oldugu icin Faz 4.2'nin mevcut hicbir cagrisi
+    etkilenmez."""
     tracker = AdaptiveTracker(
         fps=fps, track_thresh=track_thresh, match_thresh=match_thresh,
         association_dist_ratio=assoc_dist_ratio, weight_mode="adaptive",
@@ -194,7 +203,7 @@ def run_one_config(per_frame_dets_embs, gt_by_frame, fps, conf, assoc_dist_ratio
     precision, recall, f1 = prf1(tp_total, fp_total, fn_total)
     n_frames = len(per_frame_dets_embs)
 
-    return {
+    result = {
         "conf": conf, "assoc_dist_ratio": assoc_dist_ratio, "match_thresh": match_thresh,
         "track_thresh": track_thresh,
         "tp": tp_total, "fp_det": fp_total, "fn_det": fn_total,
@@ -205,6 +214,9 @@ def run_one_config(per_frame_dets_embs, gt_by_frame, fps, conf, assoc_dist_ratio
         "gt_obj": int(r["num_objects"]),
         "tracking_fps": n_frames / elapsed if elapsed > 0 else 0.0,
     }
+    if return_accumulator:
+        return result, acc
+    return result
 
 
 def _assoc_grid(current_dist_ratio, current_match_thresh):
