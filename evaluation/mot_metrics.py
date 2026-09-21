@@ -89,7 +89,13 @@ def evaluate_sequence(gt_by_frame: dict, hyp_by_frame: dict) -> mm.MOTAccumulato
     return acc
 
 
-METRIC_NAMES = ["mota", "idf1", "num_switches", "num_false_positives", "num_misses", "num_objects"]
+METRIC_NAMES = [
+    "mota", "idf1", "num_switches", "num_false_positives", "num_misses", "num_objects",
+    # Faz 4.2: MT/ML/PT -- geriye-uyumlu ek, var olan hicbir cagirici bunlari
+    # OKUMAK ZORUNDA degil (DataFrame'e sadece yeni sutun ekler, mevcut
+    # sutunlari degistirmez/kaldirmaz).
+    "mostly_tracked", "partially_tracked", "mostly_lost",
+]
 
 
 def summarize(accumulators: dict) -> "mm.pandas.DataFrame":
@@ -113,6 +119,9 @@ def format_summary(summary) -> str:
             "num_false_positives": "FP",
             "num_misses": "FN (miss)",
             "num_objects": "GT obj.",
+            "mostly_tracked": "MT",
+            "partially_tracked": "PT",
+            "mostly_lost": "ML",
         },
     )
     return strsummary

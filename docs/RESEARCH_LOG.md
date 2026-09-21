@@ -1113,6 +1113,17 @@ compare_finetune_vs_baseline.py`:**
 MOTA=-%7.4/IDF1=%11.4/FP=1416/FN=8377 -- bu, yeni script'in Faz 4.0'in
 metodolojisini dogru tekrarladiginin bagimsiz bir dogrulamasi.)
 
+> **Faz 4.2 duzeltmesi (2026-09-21):** yukaridaki tablonun MOTA/IDF1/IDSW/FP/FN
+> sutunlari "conf=0.35" diye etiketlenmis olsa da, `AdaptiveTracker.
+> track_thresh` varsayilaninin (0.5) sessizce devrede kalmasi yuzunden
+> **gercekte etkin conf~=0.50'de** olculmustu (Recall@IoU0.5 satiri bundan
+> ETKILENMEDI, o saf tespit-seviyesi bir olcum). Faz 4.2'nin duzeltilmis
+> sweep'i bunu bire bir dogruladi ve GERCEK conf=0.35'teki tracker
+> performansinin raporlanandan da kotu oldugunu (MOTA -%25.3 degil -%64.2,
+> IDSW 300 degil 442) ortaya cikardi -- ama ayni zamanda dogru conf secildiginde
+> (0.55) MOTA'nin -%13.4'e kadar iyilesebildigini de gosterdi. Detaylar: "Faz
+> 4.2" bolumu ve `experiments/PHASE_4_2_REPORT.md`.
+
 **Sonuc, tek yonlu bir zafer DEGIL -- durustce iki parcali:**
 
 1. **Yuksek yogunluklu sahnede tespit katmaninda GERCEK, BUYUK bir
@@ -1147,6 +1158,58 @@ model icin bir benzeri, bu oturumda UYGULANMADI, acik bir sonraki adim)."
 
 13 yeni birim test (`_write_yolo_label`, `_read_gt_by_frame`,
 `_read_seqinfo_size`, `_count_gt_misses`, `confirm_no_leakage`). 157 test yesil.
+
+## Faz 4.2 — Uctan uca optimizasyon: confidence + tracker sweep, ve Faz 4.1'in kendi sayilarinda bulunan bir etiket hatasi (2026-09-21)
+
+Faz 4.1'in actik biraktigi soruyu ("conf_threshold fine-tune edilmis modele
+gore yeniden ayarlanirsa ID-switch patlamasi duzelir mi?") test etti --
+`evaluation/optimize_finetuned_tracker.py`, DOKUNULMAMIS 2 Faz 4.0
+degerlendirme sahnesinde 11 confidence degeri + kucuk bir association-
+parametre izgarasi (56 konfigurasyon toplam), tek bir GPU tespit gecisi
+uzerinden (Faz 3.0'in "tek gecis, coklu filtre" optimizasyonuyla, SIFIR ek
+YOLO/OSNet maliyeti).
+
+**Yol boyunca, yayinlanmadan once, iki ayri metodoloji sorunu bulunup
+duzeltildi** (bkz. yukaridaki "Faz 4.2 duzeltmesi" notu, Faz 4.1 bolumunde):
+script'in kendi ilk yaziminda yanlislikla eklenen bir `missed`-filtreleme
+tutarsizligi, VE Faz 4.1'in raporunun kendisinde -- `track_thresh`
+varsayilaninin sessizce devrede kalmasi yuzunden -- "conf=0.35" etiketiyle
+aslinda etkin conf~=0.50 olcen bir hata. Ikisi de aciga cikarilip duzeltildi,
+sweep sifirdan tekrarlandi.
+
+**Sonuc -- dort farkli metrik, dort farkli tepe noktasi (yuksek yogunluklu
+sahne, uav0000137_00458_v):** ham tespit F1'i conf~=0.45-0.50'de, IDF1
+conf=0.55'te (0.439), MOTA conf=0.70'te (-0.049), IDSW de conf=0.70'te (162,
+monoton azaliyor) tepe yapiyor. Association-parametre izgarasi (dist_ratio x
+match_thresh) confidence'in sagladigi kazanimin yaninda kucuk kaliyor --
+en iyi kombinasyon IDF1'i sadece ~0.0005 artiriyor -- ama `dist_ratio=0.12`
+(mevcut 0.08'den +%50) her iki aday conf'ta da MOTA'yi tutarli sekilde
+iyilestiriyor (en iyi: -0.014), Faz 3.5'in MOT17'de bulduğu "genisletme net
+negatif" sonucunun VisDrone'a KORULEMEDEN tasinmadigini (ve haklı olarak
+tasinmadigini) gosteriyor.
+
+**Onerilen konfigurasyon (conf=0.55, dist_ratio=0.08 degismedi,
+match_thresh=0.3->0.2):** Faz 4.1'in (yanlis etiketli) sonucuna gore bile
+IDF1 0.401->0.439, MOTA -%25.3->-%13.4 (neredeyse yari yariya iyilesme),
+recall %59.0'da kaliyor (baseline'in %15.1'inin ~4 katindan fazla). Hala
+MOTA<0 -- "cozuldu" degil, "olculebilir ikinci-tur ilerleme."
+
+**Ikinci sahnede (`uav0000305_00000_v`, dusuk yogunluk) hicbir konfigurasyon
+anlamli iyilesme saglamiyor** -- recall her ayarda %0.7'nin altinda kaliyor;
+bu bir parametre sorunu degil, detector'un bu sahnede nesneyi hic
+gormemesi (kok nedeni arastirilmadi). Sahte bir "optimum" secmek yerine bu
+acikca "cozumsuz" olarak raporlandi.
+
+**Sizinti/genelleme:** secim de AYNI 2 dokunulmamis sahne uzerinde yapildigi
+icin bu kesif niteliginde bir hassasiyet analizi, bagimsiz bir train/val/test
+ayrimina dayali hyperparametre secimi degil. VisDrone'un indirilmemis 3
+sahnesi (`uav0000117_02622_v`, `uav0000182_00000_v`, `uav0000268_05773_v`)
+gercek bir dogrulama kumesi icin dogal aday ama bu faz onlari INDIRMEDI --
+yeni veri indirmesi ayri kullanici onayi gerektiriyor.
+
+14 yeni birim test (`match_boxes_hungarian`, `prf1`, `confirm_no_leakage`,
+`_assoc_grid`). 171 test yesil. Tam tablolar ve Pareto analizi:
+`experiments/PHASE_4_2_REPORT.md`.
 
 ## Yol haritasi
 
@@ -1295,10 +1358,14 @@ model icin bir benzeri, bu oturumda UYGULANMADI, acik bir sonraki adim)."
       conf_threshold=0.35 artik kalibre degil, test edilmedi). Tek yonlu
       zafer degil -- tespit katmaninda kismi, sahneye-ozel bir ilerleme.
       Bkz. "Faz 4.1"
-- [ ] Faz 4.1'in actigi soru: fine-tune edilmis model icin conf_threshold
-      sweep'i (Faz 3.0'in orijinali gibi) -- ID-switch patlamasini
-      duzeltebilir mi, test edilmedi
-- [ ] Faz 4.2 (gercek-zamanli/gomulu) ve Faz 4.3 (coklu kamera) -- Faz 4.0/4.1
+- [x] **Faz 4.2:** Faz 4.1'in actigi soru test edildi -- fine-tune edilmis
+      model icin uctan uca confidence+tracker sweep (56 konfigurasyon).
+      **Evet, duzeltilebiliyor:** dogru conf (0.55) ile MOTA -%25.3->-%13.4,
+      IDF1 0.401->0.439; ayrica Faz 4.1'in kendi raporunda "conf=0.35"
+      etiketiyle aslinda etkin conf~=0.50 olculdugunu ortaya cikardi (bkz.
+      Faz 4.1 bolumundeki duzeltme notu). Dusuk yogunluklu sahne hala
+      cozumsuz -- durustce boyle raporlandi. Bkz. "Faz 4.2"
+- [ ] Faz 4.3 (gercek-zamanli/gomulu) ve Faz 4.4 (coklu kamera) -- Faz 4.0/4.1/4.2
       sonucuna gore hala ERTELENMIS durumda (bkz. onaylanmis plan)
 
 ## Demo video

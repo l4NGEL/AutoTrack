@@ -30,7 +30,7 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   sıçramalar), fps-körlüğü (bir sekansta MOTA -%10.6'ya çöküyordu),
   NumPy 2.0/PyTorch 2.6 uyumluluk kırılmaları, ve arka-plan analiz
   araçlarının kendisinde bulunan 3 ayrı sınıflandırma hatası.
-- **157 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
+- **171 birim/entegrasyon test**, her yeni bulgu once sentetik veriyle
   kilitlendi.
 - **Kapsam genişletme testi de aynı disiplinle:** "drone kamerası" senaryosu
   VisDrone-MOT ile ilk kez gerçek veride sınandı -- sonuç "iyi çalışıyor"
@@ -42,6 +42,12 @@ yarısı ilk halinde doğrulanmadı ve bu **saklanmadı**:
   kazanç -- ama diğer sahnede yok denecek kadar az, ve ID-switch 15'ten
   300'e fırladı. Tek yönlü bir "çözüldü" hikâyesi değil, kısmi ve
   sahneye-özel bir ilerleme olarak raporlandı.
+- **Faz 4.2'de o ID-switch bulgusu test edildi:** uçtan uca confidence+tracker
+  sweep (56 konfigürasyon), yol boyunca Faz 4.1'in kendi raporunda bir
+  etiket hatası bulup düzeltti (sessiz bir tracker eşiği yüzünden "conf=0.35"
+  aslında etkin conf≈0.50 ölçüyordu). Doğru confidence (0.55) ile MOTA
+  -%25.3→-%13.4, IDF1 0.401→0.439 -- ama düşük yoğunluklu sahne hiçbir
+  parametreyle düzelmedi, dürüstçe "çözümsüz" olarak raporlandı.
 
 Bu araştırmanın tam, kronolojik dökümü (her fazın gerçek sayıları, kod
 referansları ve dürüst sınırlamalarıyla) [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
@@ -214,6 +220,7 @@ Tam derivasyon, ara-adımlar ve her tablonun nasıl üretildiği için
 | Tracker-tarafı müdahaleler (ReID skoru, mesafe sınırı, confidence eşiği) | Üçü de test edildi, üçü de negatif -- bkz. Faz 3.0/3.4/3.5 |
 | VisDrone (havadan görüntü), COCO-eğitimli detector | Detector seviyesinde başarısız, kök nedeniyle doğrulandı (Faz 4.0) |
 | VisDrone, kendi verisiyle fine-tune sonrası, dokunulmamış sahnede | Recall@IoU0.5 %15.1→%68.9 (1 sahnede) ama diğer sahnede yok denecek kadar az (%0.0→%0.2), ID-switch 15→300'e çıktı (Faz 4.1) |
+| VisDrone, aynı sahnede uçtan uca confidence+tracker sweep sonrası | MOTA -%25.3→-%13.4, IDF1 0.401→0.439 (doğru conf=0.55 ile); düşük yoğunluklu sahne hiçbir parametreyle düzelmedi (Faz 4.2) |
 | Uçtan uca hız (RTX 2080, MOT17-04 demo klibi) | ~9-11 FPS -- gerçek zamanlı değil |
 
 ## Bilinen sınırlamalar
@@ -231,6 +238,11 @@ her negatif sonuç. Öne çıkanlar:
   bunu kısmen düzeltti (bir sahnede recall %15→%69) ama genellemiyor
   (diğer sahnede ~%0 kaldı) ve tracker tarafında yeni bir ID-switch sorunu
   açtı -- "çözüldü" değil, "kısmi, sahneye-özel ilerleme" (bkz. Faz 4.1).
+  Faz 4.2'nin confidence+tracker sweep'i bu ID-switch sorununu kısmen
+  düzeltti (doğru conf ile MOTA -%25.3→-%13.4) ama düşük yoğunluklu sahneyi
+  hiç düzeltemedi -- ayrıca bu sweep de AYNI 2 dokunulmamış sahne üzerinde
+  parametre seçtiği için sonuç kesif niteliğinde, bağımsız bir doğrulama
+  kümesiyle henüz teyit edilmedi (bkz. Faz 4.2).
 - Çoklu kamera / kameralar-arası (cross-camera) Re-ID henüz yok.
 - Saf Python/PyTorch -- gömülü donanım veya TensorRT/ONNX gibi bir
   hızlandırma katmanı için ayrıca optimize edilmedi.
@@ -251,7 +263,8 @@ benchmark/leaderboard artik kullanmiyor; savunma sektorune yonelik bir
 portfoyde bu tartismali kaynagi atlamak daha temiz. MSMT17 — yazarlardan izin
 basvurusu gerektiriyor, bu projenin kapsaminda degil.
 
-**Faz 4.0/4.1'de denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
+**Faz 4.0/4.1/4.2'de denendi:** [VisDrone](http://aiskyeye.com/) (havadan/drone
 açısı) -- COCO-eğitimli detector bu ölçekte çalışmadı (Faz 4.0); kendi
-verisiyle fine-tune kısmen düzeltti, tam genellemedi (Faz 4.1). Detaylar
-[docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
+verisiyle fine-tune kısmen düzeltti, tam genellemedi (Faz 4.1); uçtan uca
+confidence+tracker sweep'i bunun üzerine kısmen daha iyileştirdi (Faz 4.2).
+Detaylar [docs/RESEARCH_LOG.md](docs/RESEARCH_LOG.md)'de.
